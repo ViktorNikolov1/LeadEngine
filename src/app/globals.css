@@ -29,8 +29,7 @@
 
 @layer base {
     body {
-        @apply bg-slate-50 text-slate-900 antialiased selection:bg-primary-500/10 selection:text-primary-700;
-        font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        @apply antialiased;
     }
 }
 
@@ -67,7 +66,7 @@
 
 @layer utilities {
     .animate-in {
-        animation-duration: 0.8s;
+        animation-duration: var(--tw-duration, 0.8s);
         animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
         animation-fill-mode: both;
     }
@@ -94,7 +93,7 @@
 
 @keyframes slideInFromBottom {
     from {
-        transform: translateY(var(--tw-enter-translate-y));
+        transform: translateY(var(--tw-enter-translate-y, 2rem));
         opacity: 0;
     }
 
