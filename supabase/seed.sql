@@ -1,0 +1,2 @@
+-- Seed data for development
+-- Add test campaigns and leads here

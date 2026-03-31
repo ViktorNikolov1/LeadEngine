@@ -1,0 +1,290 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+    /* Premium Indigo/Violet Primary Scale */
+    --color-primary-50: #eff6ff;
+    --color-primary-100: #dbeafe;
+    --color-primary-200: #bfdbfe;
+    --color-primary-300: #93c5fd;
+    --color-primary-400: #60a5fa;
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --color-primary-700: #1d4ed8;
+    --color-primary-800: #1e40af;
+    --color-primary-900: #1e3a8a;
+
+    /* Clean Slate Secondary Scale */
+    --color-secondary-50: #f8fafc;
+    --color-secondary-100: #f1f5f9;
+    --color-secondary-200: #e2e8f0;
+    --color-secondary-300: #cbd5e1;
+    --color-secondary-400: #94a3b8;
+    --color-secondary-500: #64748b;
+    --color-secondary-600: #475569;
+    --color-secondary-700: #334155;
+    --color-secondary-800: #1e293b;
+    --color-secondary-900: #0f172a;
+
+    /* Multi-layered Soft Shadows for Premium Depth */
+    --shadow-premium: 0 4px 6px -1px rgba(15, 23, 42, 0.05), 0 2px 4px -1px rgba(15, 23, 42, 0.03), 0 12px 24px -4px rgba(15, 23, 42, 0.03);
+    --shadow-premium-hover: 0 10px 15px -3px rgba(15, 23, 42, 0.06), 0 4px 6px -2px rgba(15, 23, 42, 0.04), 0 24px 48px -12px rgba(15, 23, 42, 0.08);
+    --shadow-premium-inner: inset 0 2px 4px 0 rgba(255, 255, 255, 0.5), inset 0 1px 2px 0 rgba(15, 23, 42, 0.02);
+}
+
+@layer base {
+    body {
+        @apply antialiased bg-secondary-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 selection:bg-primary-500/20 selection:text-primary-900;
+        font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    }
+}
+
+@layer components {
+    .btn-primary {
+        @apply bg-primary-600 text-white hover:bg-primary-700 transition-all duration-300 shadow-lg shadow-primary-600/25 active:scale-95 active:shadow-sm px-5 py-2.5 rounded-xl font-bold text-[13px] tracking-wide flex items-center justify-center gap-2 border border-primary-500/50 hover:border-primary-400;
+    }
+
+    .card {
+        @apply bg-white dark:bg-slate-800 border border-secondary-200/50 dark:border-slate-600 rounded-2xl transition-all duration-500 relative overflow-hidden;
+        box-shadow: var(--shadow-premium);
+    }
+
+    :is(.dark) .card {
+        box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.4);
+    }
+
+    .card::before {
+        content: '';
+        @apply absolute inset-0 bg-gradient-to-br from-white/60 to-transparent pointer-events-none rounded-2xl;
+    }
+
+    /* Remove the hazy overlay entirely in dark mode */
+    :is(.dark) .card::before {
+        display: none;
+    }
+
+    .card:hover {
+        @apply border-secondary-200/80 dark:border-slate-500 -translate-y-[2px];
+        box-shadow: var(--shadow-premium-hover);
+    }
+
+    :is(.dark) .card:hover {
+        box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5);
+    }
+
+    .nav-link {
+        @apply flex items-center gap-3 px-4 py-2.5 text-secondary-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-slate-700/60 rounded-xl transition-all duration-200 font-medium text-[13px] tracking-tight;
+    }
+
+    .nav-link-active {
+        @apply flex items-center gap-3 px-4 py-2.5 text-primary-700 dark:text-primary-300 bg-primary-50/80 dark:bg-primary-500/15 shadow-sm border border-primary-100/50 dark:border-primary-400/30 rounded-xl font-semibold text-[13px] tracking-tight relative overflow-hidden;
+    }
+
+    .nav-link-active::before {
+        content: '';
+        @apply absolute left-0 top-1/2 -translate-y-1/2 w-1 h-2/3 bg-primary-500 rounded-r-full;
+    }
+
+    .glass-panel {
+        @apply bg-white/80 dark:bg-slate-900 backdrop-blur-xl border-r border-secondary-200/50 dark:border-slate-700 shadow-[4px_0_24px_-8px_rgba(0,0,0,0.05)];
+    }
+
+    :is(.dark) .glass-panel {
+        backdrop-filter: none;
+    }
+
+    .glass-card {
+        @apply bg-white/80 dark:bg-slate-800 backdrop-blur-md border border-secondary-200/50 dark:border-slate-600 rounded-2xl shadow-sm hover:shadow-md transition-shadow duration-300;
+    }
+
+    :is(.dark) .glass-card {
+        backdrop-filter: none;
+    }
+
+    .input-field {
+        @apply w-full bg-secondary-50/50 dark:bg-slate-800/50 border border-secondary-200 dark:border-slate-700 rounded-2xl py-3 px-4 text-sm text-slate-900 dark:text-slate-100 placeholder:text-secondary-300 dark:placeholder:text-slate-500 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold;
+    }
+}
+
+@layer utilities {
+    .animate-in {
+        animation-duration: var(--tw-duration, 0.6s);
+        animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+        animation-fill-mode: both;
+    }
+
+    .fade-in {
+        animation-name: fadeIn;
+    }
+
+    .slide-in-from-bottom-4 {
+        --tw-enter-translate-y: 1.5rem;
+        animation-name: slideInFromBottom;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes slideInFromBottom {
+    from {
+        transform: translateY(var(--tw-enter-translate-y, 1.5rem));
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Custom Slim Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 10px;
+    border: 1px solid transparent;
+    background-clip: padding-box;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: #94a3b8;
+}
+
+/* Glass Badge */
+.glass-badge {
+    @apply px-2.5 py-1 rounded-md bg-white/70 dark:bg-slate-800/70 backdrop-blur-md border border-secondary-200/50 dark:border-slate-700/50 text-[11px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 shadow-sm;
+}
+
+/* ============================================
+   DARK MODE — high-contrast overrides
+   Background layers (darkest → lightest):
+     body:       #0f172a  (slate-900)
+     surface:    #1e293b  (slate-800) — cards, panels
+     elevated:   #334155  (slate-700) — hover states, inputs
+     border:     #475569  (slate-600) — visible borders
+   Text (dimmest → brightest):
+     muted:      #94a3b8  (slate-400) — labels, secondary
+     body:       #cbd5e1  (slate-300) — readable body text
+     heading:    #f1f5f9  (slate-100) — titles, values
+     bright:     #ffffff  — emphasis
+   ============================================ */
+
+/* --- Text --- */
+:is(.dark) .text-slate-900 { color: #f1f5f9; }
+:is(.dark) .text-slate-800 { color: #e2e8f0; }
+:is(.dark) .text-slate-700 { color: #e2e8f0; }
+:is(.dark) .text-slate-600 { color: #cbd5e1; }
+:is(.dark) .text-secondary-500 { color: #cbd5e1; }
+:is(.dark) .text-secondary-400 { color: #94a3b8; }
+:is(.dark) .text-secondary-300 { color: #64748b; }
+
+/* --- Backgrounds — solid colors, no transparency haze --- */
+:is(.dark) .bg-white { background-color: #1e293b; }
+:is(.dark) .bg-white\/60 { background-color: #1e293b; }
+:is(.dark) .bg-white\/80 { background-color: #1e293b; }
+:is(.dark) .bg-white\/90 { background-color: #1e293b; }
+:is(.dark) .bg-white\/50 { background-color: #1e293b; }
+:is(.dark) .bg-secondary-50 { background-color: #0f172a; }
+:is(.dark) .bg-secondary-50\/30 { background-color: #0f172a; }
+:is(.dark) .bg-secondary-50\/50 { background-color: #0f172a; }
+:is(.dark) .bg-secondary-100 { background-color: #1e293b; }
+:is(.dark) .bg-secondary-100\/50 { background-color: #1e293b; }
+
+/* --- Hover backgrounds — clearly distinct --- */
+:is(.dark) .hover\:bg-white:hover { background-color: #334155; }
+:is(.dark) .hover\:bg-secondary-50:hover { background-color: #1e293b; }
+:is(.dark) .hover\:bg-slate-100\/80:hover { background-color: #334155; }
+:is(.dark) .hover\:bg-secondary-50\/50:hover { background-color: #1e293b; }
+
+/* --- Borders — bright enough to be visible --- */
+:is(.dark) .border-secondary-200\/60 { border-color: rgba(71, 85, 105, 0.6); }
+:is(.dark) .border-secondary-200\/50 { border-color: rgba(71, 85, 105, 0.5); }
+:is(.dark) .border-secondary-200 { border-color: #475569; }
+:is(.dark) .border-secondary-100 { border-color: #334155; }
+:is(.dark) .border-secondary-100\/50 { border-color: rgba(51, 65, 85, 0.5); }
+
+/* --- Dividers --- */
+:is(.dark) .divide-secondary-100\/30 > * + * { border-color: rgba(51, 65, 85, 0.4); }
+:is(.dark) .divide-secondary-100\/50 > * + * { border-color: rgba(51, 65, 85, 0.5); }
+:is(.dark) .divide-y > * + * { border-color: #334155; }
+
+/* --- Shadows --- */
+:is(.dark) .shadow-inner { box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.4); }
+:is(.dark) .shadow-sm { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.3); }
+
+/* --- Scrollbar --- */
+:is(.dark) .custom-scrollbar::-webkit-scrollbar-thumb { background: #475569; }
+:is(.dark) .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+/* --- Status badges — keep their colors legible in dark mode --- */
+:is(.dark) .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12); }
+:is(.dark) .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12); }
+:is(.dark) .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
+:is(.dark) .bg-purple-50 { background-color: rgba(168, 85, 247, 0.12); }
+:is(.dark) .bg-red-50 { background-color: rgba(239, 68, 68, 0.12); }
+:is(.dark) .bg-slate-50 { background-color: rgba(100, 116, 139, 0.12); }
+:is(.dark) .bg-sky-50 { background-color: rgba(14, 165, 233, 0.12); }
+:is(.dark) .bg-emerald-50\/50 { background-color: rgba(16, 185, 129, 0.08); }
+:is(.dark) .bg-primary-50 { background-color: rgba(59, 130, 246, 0.1); }
+:is(.dark) .bg-primary-50\/30 { background-color: rgba(59, 130, 246, 0.06); }
+:is(.dark) .bg-primary-50\/40 { background-color: rgba(59, 130, 246, 0.08); }
+:is(.dark) .bg-primary-100 { background-color: rgba(59, 130, 246, 0.15); }
+
+/* Badge borders */
+:is(.dark) .border-blue-200 { border-color: rgba(59, 130, 246, 0.3); }
+:is(.dark) .border-emerald-200 { border-color: rgba(16, 185, 129, 0.3); }
+:is(.dark) .border-amber-200 { border-color: rgba(245, 158, 11, 0.3); }
+:is(.dark) .border-purple-200 { border-color: rgba(168, 85, 247, 0.3); }
+:is(.dark) .border-red-200 { border-color: rgba(239, 68, 68, 0.3); }
+:is(.dark) .border-slate-200 { border-color: rgba(100, 116, 139, 0.3); }
+:is(.dark) .border-primary-200 { border-color: rgba(59, 130, 246, 0.25); }
+:is(.dark) .border-primary-200\/50 { border-color: rgba(59, 130, 246, 0.15); }
+:is(.dark) .border-primary-100 { border-color: rgba(59, 130, 246, 0.2); }
+:is(.dark) .border-primary-300 { border-color: rgba(59, 130, 246, 0.4); }
+
+/* --- Gradient overlays --- */
+:is(.dark) .from-secondary-50 { --tw-gradient-from: #1e293b; }
+:is(.dark) .to-secondary-200 { --tw-gradient-to: #334155; }
+:is(.dark) .from-white\/40 { --tw-gradient-from: transparent; }
+:is(.dark) .from-white\/60 { --tw-gradient-from: transparent; }
+
+/* --- Remove backdrop blur in dark mode (causes haze) --- */
+:is(.dark) .backdrop-blur-md { backdrop-filter: none; }
+:is(.dark) .backdrop-blur-xl { backdrop-filter: none; }
+:is(.dark) .backdrop-blur-sm { backdrop-filter: none; }
+
+/* --- Dashed borders --- */
+:is(.dark) .border-dashed { border-color: #475569; }
+
+/* --- Modal overlay — keep blur only for modals via dedicated class --- */
+:is(.dark) .bg-slate-900\/40 { background-color: rgba(0, 0, 0, 0.6); }
+:is(.dark) .bg-slate-900\/20 { background-color: rgba(0, 0, 0, 0.4); }
+
+/* --- Hover states for action buttons --- */
+:is(.dark) .hover\:bg-amber-50:hover { background-color: rgba(245, 158, 11, 0.12); }
+:is(.dark) .hover\:bg-emerald-50:hover { background-color: rgba(16, 185, 129, 0.12); }
+:is(.dark) .hover\:bg-red-50:hover { background-color: rgba(239, 68, 68, 0.12); }
+:is(.dark) .hover\:bg-primary-50:hover { background-color: rgba(59, 130, 246, 0.12); }
+:is(.dark) .hover\:bg-primary-50\/20:hover { background-color: rgba(59, 130, 246, 0.08); }
+:is(.dark) .hover\:bg-primary-50\/30:hover { background-color: rgba(59, 130, 246, 0.1); }
+:is(.dark) .hover\:bg-rose-50:hover { background-color: rgba(244, 63, 94, 0.12); }
+:is(.dark) .hover\:bg-blue-50:hover { background-color: rgba(59, 130, 246, 0.12); }
+
+/* --- Emerald/amber border in dark --- */
+:is(.dark) .border-emerald-100 { border-color: rgba(16, 185, 129, 0.25); }
+:is(.dark) .border-amber-100 { border-color: rgba(245, 158, 11, 0.25); }
+:is(.dark) .border-sky-100 { border-color: rgba(14, 165, 233, 0.25); }
