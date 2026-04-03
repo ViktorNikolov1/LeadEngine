@@ -2,8 +2,16 @@ import { createClient } from '@supabase/supabase-js';
 import type { EmailStatus } from '@/types';
 
 export function createServerClient() {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+        console.error('Missing Supabase env vars:', {
+            NEXT_PUBLIC_SUPABASE_URL: supabaseUrl ? 'set' : 'MISSING',
+            SUPABASE_SERVICE_ROLE_KEY: supabaseKey ? 'set' : 'MISSING',
+        });
+        throw new Error('Supabase server env vars not configured');
+    }
 
     return createClient(supabaseUrl, supabaseKey);
 }
