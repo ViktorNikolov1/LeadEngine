@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { fetchRuns, fetchRunStats } from '@/lib/supabase/server';
 import LogsClient from './logs-client';
 

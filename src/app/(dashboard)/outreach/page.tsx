@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { fetchEmails, fetchEmailStats, fetchLeads } from '@/lib/supabase/server';
 import { isResendConfigured } from '@/lib/email/resend';
 import { isGeminiConfigured } from '@/lib/ai/gemini';

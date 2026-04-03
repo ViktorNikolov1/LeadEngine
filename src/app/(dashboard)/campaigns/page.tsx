@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { fetchCampaigns, fetchCampaignLeadCounts } from '@/lib/supabase/server';
 import CampaignsClient from './campaigns-client';
 
