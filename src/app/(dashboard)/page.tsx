@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { fetchLeadStats, fetchLeads, fetchEmailStats, fetchCampaigns } from '@/lib/supabase/server';
 import DashboardClient from './dashboard-client';
 
