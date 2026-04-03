@@ -151,7 +151,7 @@ export async function POST(request: NextRequest) {
 
         // --- 5. Normalize and insert into Supabase ---
         const leads = rawItems
-            .map((item) => normalizeLead(item, campaignId))
+            .map((item) => normalizeLead(item, campaignId, industry))
             .filter((lead): lead is NormalizedLead => lead !== null);
 
         const { data: savedLeads, error: insertError } = await supabase

@@ -25,6 +25,7 @@ export type Lead = {
     company_domain: string | null;
     company_linkedin_url: string | null;
     job_title: string | null;
+    industry: string | null;
     status: 'new' | 'enriched' | 'contacted' | 'replied' | 'disqualified';
     enrichment_data: Record<string, unknown> | null;
     source: string | null;

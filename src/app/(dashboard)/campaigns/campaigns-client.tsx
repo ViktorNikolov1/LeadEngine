@@ -24,10 +24,14 @@ import {
     ShoppingBag,
     Landmark,
     Layers,
+    UserPlus,
+    Factory,
+    CheckCircle,
+    AlertCircle,
 } from 'lucide-react';
 import type { Campaign } from '@/types';
 
-type LeadCounts = Record<string, { total: number; byStatus: Record<string, number> }>;
+type LeadCounts = Record<string, { total: number; byStatus: Record<string, number>; industries: Record<string, number> }>;
 
 // Icon palette for campaigns (cycles through)
 const CAMPAIGN_ICONS = [
@@ -54,6 +58,14 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
     const [togglingId, setTogglingId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
+
+    // Add Leads modal state
+    const [addLeadsCampaign, setAddLeadsCampaign] = useState<Campaign | null>(null);
+    const [availableIndustries, setAvailableIndustries] = useState<{ industry: string; total: number; unassigned: number }[]>([]);
+    const [totalUnassigned, setTotalUnassigned] = useState(0);
+    const [loadingAvailable, setLoadingAvailable] = useState(false);
+    const [addingIndustry, setAddingIndustry] = useState<string | null>(null);
+    const [addResult, setAddResult] = useState<{ success: boolean; message: string } | null>(null);
 
     const activeCounts = campaigns.filter(c => c.status === 'active').length;
     const pausedCounts = campaigns.filter(c => c.status === 'paused').length;
@@ -136,6 +148,79 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
             // silent
         } finally {
             setDeletingId(null);
+        }
+    };
+
+    const openAddLeads = async (campaign: Campaign) => {
+        setAddLeadsCampaign(campaign);
+        setAddResult(null);
+        setLoadingAvailable(true);
+        try {
+            const res = await fetch('/api/leads/available');
+            const data = await res.json();
+            if (res.ok) {
+                setAvailableIndustries(data.industries ?? []);
+                setTotalUnassigned(data.totalUnassigned ?? 0);
+            }
+        } catch {
+            // silent
+        } finally {
+            setLoadingAvailable(false);
+        }
+    };
+
+    const handleAddByIndustry = async (industry: string) => {
+        if (!addLeadsCampaign) return;
+        setAddingIndustry(industry);
+        setAddResult(null);
+        try {
+            const res = await fetch(`/api/campaigns/${addLeadsCampaign.id}/add-leads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'industry', industry }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setAddResult({ success: true, message: `${data.added} leads added to campaign` });
+                // Refresh available industries
+                const refreshRes = await fetch('/api/leads/available');
+                const refreshData = await refreshRes.json();
+                if (refreshRes.ok) {
+                    setAvailableIndustries(refreshData.industries ?? []);
+                    setTotalUnassigned(refreshData.totalUnassigned ?? 0);
+                }
+            } else {
+                setAddResult({ success: false, message: data.error ?? 'Failed to add leads' });
+            }
+        } catch {
+            setAddResult({ success: false, message: 'Failed to add leads' });
+        } finally {
+            setAddingIndustry(null);
+        }
+    };
+
+    const handleAddAllUnassigned = async () => {
+        if (!addLeadsCampaign) return;
+        setAddingIndustry('__all__');
+        setAddResult(null);
+        try {
+            const res = await fetch(`/api/campaigns/${addLeadsCampaign.id}/add-leads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'unassigned' }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setAddResult({ success: true, message: `${data.added} leads added to campaign` });
+                setAvailableIndustries([]);
+                setTotalUnassigned(0);
+            } else {
+                setAddResult({ success: false, message: data.error ?? 'Failed to add leads' });
+            }
+        } catch {
+            setAddResult({ success: false, message: 'Failed to add leads' });
+        } finally {
+            setAddingIndustry(null);
         }
     };
 
@@ -286,61 +371,89 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
                                         <MiniStat label="Contacted" value={counts.byStatus.contacted ?? 0} />
                                     </div>
                                 )}
+
+                                {/* Industry classification */}
+                                {counts && Object.keys(counts.industries ?? {}).length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {Object.entries(counts.industries)
+                                            .sort(([, a], [, b]) => b - a)
+                                            .slice(0, 3)
+                                            .map(([ind, count]) => (
+                                                <CampaignIndustryBadge key={ind} industry={ind} count={count} />
+                                            ))
+                                        }
+                                        {Object.keys(counts.industries).length > 3 && (
+                                            <span className="text-[10px] font-bold text-secondary-400 px-2 py-0.5">
+                                                +{Object.keys(counts.industries).length - 3} more
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Footer: Actions */}
-                            <div className="pt-4 border-t border-secondary-100 flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    {!isCompleted && (
+                            <div className="pt-4 border-t border-secondary-100 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        {!isCompleted && (
+                                            <button
+                                                onClick={() => handleToggleStatus(campaign)}
+                                                disabled={togglingId === campaign.id}
+                                                className={`p-2 rounded-lg transition-all disabled:opacity-50 ${
+                                                    isActive
+                                                        ? 'text-secondary-400 hover:text-amber-600 hover:bg-amber-50'
+                                                        : 'text-primary-600 hover:bg-primary-50'
+                                                }`}
+                                                title={isActive ? 'Pause' : 'Resume'}
+                                            >
+                                                {togglingId === campaign.id ? (
+                                                    <Loader2 className="animate-spin" size={16} />
+                                                ) : isActive ? (
+                                                    <Pause size={16} />
+                                                ) : (
+                                                    <Play size={16} fill="currentColor" />
+                                                )}
+                                            </button>
+                                        )}
+                                        {!isCompleted && (
+                                            <button
+                                                onClick={() => handleMarkCompleted(campaign.id)}
+                                                disabled={togglingId === campaign.id}
+                                                className="p-2 rounded-lg text-secondary-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all disabled:opacity-50"
+                                                title="Mark Completed"
+                                            >
+                                                <Check size={16} />
+                                            </button>
+                                        )}
                                         <button
-                                            onClick={() => handleToggleStatus(campaign)}
-                                            disabled={togglingId === campaign.id}
-                                            className={`p-2 rounded-lg transition-all disabled:opacity-50 ${
-                                                isActive
-                                                    ? 'text-secondary-400 hover:text-amber-600 hover:bg-amber-50'
-                                                    : 'text-primary-600 hover:bg-primary-50'
-                                            }`}
-                                            title={isActive ? 'Pause' : 'Resume'}
+                                            onClick={() => handleDelete(campaign.id)}
+                                            disabled={deletingId === campaign.id}
+                                            className="p-2 rounded-lg text-secondary-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
+                                            title="Delete"
                                         >
-                                            {togglingId === campaign.id ? (
+                                            {deletingId === campaign.id ? (
                                                 <Loader2 className="animate-spin" size={16} />
-                                            ) : isActive ? (
-                                                <Pause size={16} />
                                             ) : (
-                                                <Play size={16} fill="currentColor" />
+                                                <Trash2 size={16} />
                                             )}
                                         </button>
-                                    )}
-                                    {!isCompleted && (
-                                        <button
-                                            onClick={() => handleMarkCompleted(campaign.id)}
-                                            disabled={togglingId === campaign.id}
-                                            className="p-2 rounded-lg text-secondary-400 hover:text-emerald-600 hover:bg-emerald-50 transition-all disabled:opacity-50"
-                                            title="Mark Completed"
-                                        >
-                                            <Check size={16} />
-                                        </button>
-                                    )}
+                                    </div>
                                     <button
-                                        onClick={() => handleDelete(campaign.id)}
-                                        disabled={deletingId === campaign.id}
-                                        className="p-2 rounded-lg text-secondary-400 hover:text-red-600 hover:bg-red-50 transition-all disabled:opacity-50"
-                                        title="Delete"
+                                        onClick={() => router.push(`/leads?campaign=${campaign.id}`)}
+                                        className="text-sm font-black text-slate-900 hover:text-primary-600 flex items-center gap-1 transition-colors"
                                     >
-                                        {deletingId === campaign.id ? (
-                                            <Loader2 className="animate-spin" size={16} />
-                                        ) : (
-                                            <Trash2 size={16} />
-                                        )}
+                                        {isCompleted ? 'View Results' : 'View Leads'}
+                                        <ArrowRight size={16} />
                                     </button>
                                 </div>
-                                <button
-                                    onClick={() => router.push(`/leads?campaign=${campaign.id}`)}
-                                    className="text-sm font-black text-slate-900 hover:text-primary-600 flex items-center gap-1 transition-colors"
-                                >
-                                    {isCompleted ? 'View Results' : 'Manage Campaign'}
-                                    <ArrowRight size={16} />
-                                </button>
+                                {!isCompleted && (
+                                    <button
+                                        onClick={() => openAddLeads(campaign)}
+                                        className="w-full py-2.5 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-primary-200/50 hover:border-primary-300"
+                                    >
+                                        <UserPlus size={14} /> Add Leads to Campaign
+                                    </button>
+                                )}
                             </div>
                         </article>
                     );
@@ -414,6 +527,151 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
                     </div>
                 </div>
             )}
+
+            {/* Add Leads to Campaign Modal */}
+            {addLeadsCampaign && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setAddLeadsCampaign(null)} />
+                    <div className="relative w-full max-w-lg card p-0 overflow-hidden animate-in slide-in-from-bottom-8 duration-500 shadow-2xl max-h-[85vh] flex flex-col">
+                        {/* Modal Header */}
+                        <div className="bg-slate-900 p-6 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
+                                    <UserPlus size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-sm uppercase tracking-widest">Add Leads</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate max-w-[250px]">{addLeadsCampaign.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setAddLeadsCampaign(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Modal Body */}
+                        <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+                            {/* Result feedback */}
+                            {addResult && (
+                                <div className={`p-4 rounded-xl border text-sm font-medium animate-in fade-in duration-300 ${
+                                    addResult.success
+                                        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                        : 'bg-red-50 border-red-200 text-red-800'
+                                }`}>
+                                    <div className="flex items-center gap-2">
+                                        {addResult.success
+                                            ? <CheckCircle size={16} className="text-emerald-600" />
+                                            : <AlertCircle size={16} className="text-red-600" />
+                                        }
+                                        <span className="font-black text-xs uppercase tracking-widest">
+                                            {addResult.success ? 'Success' : 'Error'}
+                                        </span>
+                                    </div>
+                                    <p className="text-xs mt-1">{addResult.message}</p>
+                                </div>
+                            )}
+
+                            {loadingAvailable ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="animate-spin text-primary-500" size={28} />
+                                </div>
+                            ) : totalUnassigned === 0 ? (
+                                <div className="text-center py-12">
+                                    <div className="w-16 h-16 bg-secondary-100 rounded-[2rem] flex items-center justify-center mx-auto mb-4">
+                                        <Users size={28} className="text-secondary-400" />
+                                    </div>
+                                    <h4 className="text-lg font-black text-slate-900 tracking-tight mb-1">No Unassigned Leads</h4>
+                                    <p className="text-sm text-secondary-500 font-medium">All leads are already assigned to campaigns. Run a new search to find more prospects.</p>
+                                </div>
+                            ) : (
+                                <>
+                                    {/* Add all unassigned */}
+                                    <button
+                                        onClick={handleAddAllUnassigned}
+                                        disabled={addingIndustry !== null}
+                                        className="w-full p-4 bg-slate-900 text-white rounded-xl flex items-center justify-between gap-3 hover:bg-slate-800 transition-all disabled:opacity-50 group"
+                                    >
+                                        <div className="flex items-center gap-3">
+                                            {addingIndustry === '__all__' ? (
+                                                <Loader2 className="animate-spin" size={18} />
+                                            ) : (
+                                                <Users size={18} />
+                                            )}
+                                            <div className="text-left">
+                                                <span className="text-xs font-black uppercase tracking-widest block">Add All Unassigned</span>
+                                                <span className="text-[10px] text-slate-400 font-medium">{totalUnassigned} leads available</span>
+                                            </div>
+                                        </div>
+                                        <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+                                    </button>
+
+                                    {/* Divider */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="flex-1 h-px bg-secondary-200/50" />
+                                        <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Or by Industry</span>
+                                        <div className="flex-1 h-px bg-secondary-200/50" />
+                                    </div>
+
+                                    {/* Industry list */}
+                                    <div className="space-y-2">
+                                        {availableIndustries
+                                            .filter(i => i.unassigned > 0)
+                                            .map(({ industry, unassigned, total }) => (
+                                                <button
+                                                    key={industry}
+                                                    onClick={() => handleAddByIndustry(industry)}
+                                                    disabled={addingIndustry !== null}
+                                                    className="w-full p-4 bg-white border border-secondary-200 rounded-xl flex items-center justify-between gap-3 hover:border-primary-300 hover:bg-primary-50/30 transition-all disabled:opacity-50 group"
+                                                >
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        {addingIndustry === industry ? (
+                                                            <Loader2 className="animate-spin text-primary-500 shrink-0" size={18} />
+                                                        ) : (
+                                                            <div className="w-9 h-9 rounded-lg bg-primary-50 flex items-center justify-center shrink-0">
+                                                                <Factory size={16} className="text-primary-600" />
+                                                            </div>
+                                                        )}
+                                                        <div className="text-left min-w-0">
+                                                            <span className="text-sm font-black text-slate-900 block truncate group-hover:text-primary-700 transition-colors">
+                                                                {formatIndustryLabel(industry)}
+                                                            </span>
+                                                            <span className="text-[10px] text-secondary-400 font-medium">
+                                                                {unassigned} unassigned of {total} total
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 shrink-0">
+                                                        <span className="text-xs font-black text-primary-600 bg-primary-50 px-2.5 py-1 rounded-lg border border-primary-100">
+                                                            +{unassigned}
+                                                        </span>
+                                                        <ArrowRight size={14} className="text-secondary-300 group-hover:text-primary-500 group-hover:translate-x-1 transition-all" />
+                                                    </div>
+                                                </button>
+                                            ))
+                                        }
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="p-4 border-t border-secondary-200/50 shrink-0 flex justify-between items-center">
+                            <button
+                                onClick={() => setAddLeadsCampaign(null)}
+                                className="px-6 py-2.5 bg-white border border-secondary-200 rounded-xl text-xs font-black text-slate-600 hover:bg-secondary-50 transition-all uppercase tracking-widest"
+                            >
+                                Close
+                            </button>
+                            <button
+                                onClick={() => { setAddLeadsCampaign(null); router.push(`/leads?campaign=${addLeadsCampaign.id}`); }}
+                                className="px-6 py-2.5 text-xs font-black text-primary-600 hover:text-primary-700 flex items-center gap-1.5 uppercase tracking-widest transition-colors"
+                            >
+                                View Campaign Leads <ArrowRight size={14} />
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -480,6 +738,22 @@ function MiniStat({ label, value }: { label: string; value: number }) {
             <span className="text-[10px] text-secondary-400 uppercase tracking-widest font-bold block">{label}</span>
             <span className="text-sm font-black text-slate-900">{value}</span>
         </div>
+    );
+}
+
+function formatIndustryLabel(industry: string): string {
+    return industry
+        .split(/[\s/]+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+}
+
+function CampaignIndustryBadge({ industry, count }: { industry: string; count: number }) {
+    return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-primary-50 text-primary-700 border border-primary-200/50 text-[9px] font-black uppercase tracking-wider">
+            {formatIndustryLabel(industry)}
+            <span className="text-primary-400">({count})</span>
+        </span>
     );
 }
 

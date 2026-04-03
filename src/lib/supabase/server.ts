@@ -40,20 +40,23 @@ export async function fetchCampaignLeadCounts() {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('leads')
-        .select('campaign_id, status');
+        .select('campaign_id, status, industry');
 
     if (error) {
         console.error('Error fetching lead counts:', error);
         return {};
     }
 
-    const counts: Record<string, { total: number; byStatus: Record<string, number> }> = {};
+    const counts: Record<string, { total: number; byStatus: Record<string, number>; industries: Record<string, number> }> = {};
     for (const lead of data ?? []) {
         const cid = lead.campaign_id;
         if (!cid) continue;
-        if (!counts[cid]) counts[cid] = { total: 0, byStatus: {} };
+        if (!counts[cid]) counts[cid] = { total: 0, byStatus: {}, industries: {} };
         counts[cid].total++;
         counts[cid].byStatus[lead.status] = (counts[cid].byStatus[lead.status] ?? 0) + 1;
+        if (lead.industry) {
+            counts[cid].industries[lead.industry] = (counts[cid].industries[lead.industry] ?? 0) + 1;
+        }
     }
     return counts;
 }

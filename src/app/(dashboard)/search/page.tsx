@@ -29,6 +29,10 @@ import {
     Banknote,
     MessageSquare,
     Wand2,
+    Upload,
+    CheckCircle,
+    AlertCircle,
+    FileSpreadsheet,
 } from 'lucide-react';
 import type { Lead } from '@/types';
 
@@ -209,6 +213,12 @@ export default function SearchPage() {
     const [dbLocation, setDbLocation] = useState('');
     const [dbIndustry, setDbIndustry] = useState('');
 
+    // CSV Import
+    const [importFile, setImportFile] = useState<File | null>(null);
+    const [importing, setImporting] = useState(false);
+    const [importResult, setImportResult] = useState<{ success: boolean; message: string; details?: string } | null>(null);
+    const [dragOver, setDragOver] = useState(false);
+
     // Apify filters — full actor schema
     const [fetchCount, setFetchCount] = useState(100);
     const [fileName, setFileName] = useState('Prospects');
@@ -245,6 +255,46 @@ export default function SearchPage() {
         a.download = `search-results-${new Date().toISOString().split('T')[0]}.csv`;
         a.click();
         URL.revokeObjectURL(url);
+    };
+
+    const handleImport = async () => {
+        if (!importFile) return;
+        setImporting(true);
+        setImportResult(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', importFile);
+            if (dbIndustry) formData.append('industry', dbIndustry);
+
+            const res = await fetch('/api/leads/import', {
+                method: 'POST',
+                body: formData,
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                setImportResult({
+                    success: false,
+                    message: data.error ?? 'Import failed',
+                    details: data.saved ? `${data.saved} leads saved before error.` : undefined,
+                });
+            } else {
+                setImportResult({
+                    success: true,
+                    message: data.message,
+                    details: `${data.saved} saved, ${data.skipped} skipped (missing email/LinkedIn). Columns detected: ${data.detected_columns.join(', ')}`,
+                });
+                setImportFile(null);
+            }
+        } catch {
+            setImportResult({
+                success: false,
+                message: 'Failed to upload file. Please try again.',
+            });
+        } finally {
+            setImporting(false);
+        }
     };
 
     const handleSearch = async () => {
@@ -479,11 +529,130 @@ export default function SearchPage() {
                             )}
                         </div>
                     ) : searchSource === 'database' ? (
-                        /* ----- Database simple filters ----- */
-                        <div className="card p-6 shadow-xl space-y-5">
-                            <FilterInput label="Job Title / Keyword" placeholder="e.g. CTO, VP Marketing" icon={<Award size={14} className="text-primary-500" />} value={dbJobTitle} onChange={setDbJobTitle} />
-                            <FilterInput label="Location" placeholder="e.g. London, Germany" icon={<MapPin size={14} className="text-blue-500" />} value={dbLocation} onChange={setDbLocation} />
-                            <FilterInput label="Industry / Company" placeholder="e.g. Fintech, Stripe" icon={<Building size={14} className="text-purple-500" />} value={dbIndustry} onChange={setDbIndustry} />
+                        /* ----- Database simple filters + Import ----- */
+                        <div className="space-y-4 animate-in fade-in duration-300">
+                            <div className="card p-6 shadow-xl space-y-5">
+                                <FilterInput label="Job Title / Keyword" placeholder="e.g. CTO, VP Marketing" icon={<Award size={14} className="text-primary-500" />} value={dbJobTitle} onChange={setDbJobTitle} />
+                                <FilterInput label="Location" placeholder="e.g. London, Germany" icon={<MapPin size={14} className="text-blue-500" />} value={dbLocation} onChange={setDbLocation} />
+                                <FilterInput label="Industry / Company" placeholder="e.g. Fintech, Stripe" icon={<Building size={14} className="text-purple-500" />} value={dbIndustry} onChange={setDbIndustry} />
+                            </div>
+
+                            {/* Import Database Section */}
+                            <div className="card p-6 shadow-xl space-y-5">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-xl flex items-center justify-center">
+                                        <Upload size={16} className="text-white" />
+                                    </div>
+                                    <div>
+                                        <span className="text-xs font-black text-slate-900 uppercase tracking-widest block">Import Database</span>
+                                        <span className="text-[10px] text-secondary-400 font-medium">Upload a CSV file with your leads</span>
+                                    </div>
+                                </div>
+
+                                {/* Drop zone */}
+                                <div
+                                    onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                                    onDragLeave={() => setDragOver(false)}
+                                    onDrop={(e) => {
+                                        e.preventDefault();
+                                        setDragOver(false);
+                                        const file = e.dataTransfer.files[0];
+                                        if (file && (file.name.endsWith('.csv') || file.name.endsWith('.tsv') || file.name.endsWith('.txt'))) {
+                                            setImportFile(file);
+                                            setImportResult(null);
+                                        }
+                                    }}
+                                    className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer group ${
+                                        dragOver
+                                            ? 'border-emerald-400 bg-emerald-50/50'
+                                            : importFile
+                                                ? 'border-primary-300 bg-primary-50/30'
+                                                : 'border-secondary-200 hover:border-primary-300 hover:bg-primary-50/10'
+                                    }`}
+                                >
+                                    <input
+                                        type="file"
+                                        accept=".csv,.tsv,.txt"
+                                        onChange={(e) => {
+                                            const file = e.target.files?.[0];
+                                            if (file) {
+                                                setImportFile(file);
+                                                setImportResult(null);
+                                            }
+                                        }}
+                                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                                    />
+                                    {importFile ? (
+                                        <div className="space-y-2">
+                                            <FileSpreadsheet size={28} className="text-primary-500 mx-auto" />
+                                            <p className="text-sm font-black text-slate-900 truncate">{importFile.name}</p>
+                                            <p className="text-[10px] text-secondary-400 font-bold uppercase tracking-widest">
+                                                {(importFile.size / 1024).toFixed(1)} KB
+                                            </p>
+                                            <button
+                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportFile(null); setImportResult(null); }}
+                                                className="text-[10px] font-bold text-red-500 hover:text-red-700 underline underline-offset-2"
+                                            >
+                                                Remove file
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <Upload size={28} className="text-secondary-300 mx-auto group-hover:text-primary-400 transition-colors" />
+                                            <p className="text-xs font-bold text-slate-700">
+                                                Drop your CSV here or <span className="text-primary-600">browse</span>
+                                            </p>
+                                            <p className="text-[10px] text-secondary-400 font-medium">
+                                                Supports .csv files up to 10MB
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Column info */}
+                                <div className="text-[10px] text-secondary-400 font-medium space-y-1">
+                                    <p className="font-black text-secondary-500 uppercase tracking-widest">Auto-detected columns:</p>
+                                    <p>name, email, linkedin, company, job title, location, industry, domain</p>
+                                </div>
+
+                                {/* Import button */}
+                                {importFile && (
+                                    <button
+                                        onClick={handleImport}
+                                        disabled={importing}
+                                        className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 disabled:opacity-50"
+                                    >
+                                        {importing ? (
+                                            <><Loader2 className="animate-spin" size={16} /> Importing...</>
+                                        ) : (
+                                            <><Upload size={16} /> Import {importFile.name}</>
+                                        )}
+                                    </button>
+                                )}
+
+                                {/* Import result feedback */}
+                                {importResult && (
+                                    <div className={`p-4 rounded-xl border text-sm font-medium animate-in fade-in duration-300 ${
+                                        importResult.success
+                                            ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                                            : 'bg-red-50 border-red-200 text-red-800'
+                                    }`}>
+                                        <div className="flex items-center gap-2 mb-1">
+                                            {importResult.success
+                                                ? <CheckCircle size={16} className="text-emerald-600" />
+                                                : <AlertCircle size={16} className="text-red-600" />
+                                            }
+                                            <span className="font-black text-xs uppercase tracking-widest">
+                                                {importResult.success ? 'Import Successful' : 'Import Failed'}
+                                            </span>
+                                        </div>
+                                        <p className="text-xs">{importResult.message}</p>
+                                        {importResult.details && (
+                                            <p className="text-[10px] mt-1 opacity-75">{importResult.details}</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     ) : (
                         /* ----- Apify full filters ----- */

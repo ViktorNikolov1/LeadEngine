@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
             query = query.ilike('location', `%${location}%`);
         }
         if (industry) {
-            query = query.or(`company_name.ilike.%${industry}%,headline.ilike.%${industry}%`);
+            query = query.or(`industry.ilike.%${industry}%,company_name.ilike.%${industry}%,headline.ilike.%${industry}%`);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false }).limit(50);

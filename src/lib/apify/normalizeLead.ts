@@ -8,6 +8,7 @@ export type NormalizedLead = {
     company_name: string | null;
     job_title: string | null;
     email: string | null;
+    industry: string | null;
     enrichment_data: Record<string, unknown>;
     campaign_id: string | null;
 };
@@ -20,6 +21,7 @@ export type NormalizedLead = {
 export function normalizeLead(
     raw: Record<string, unknown>,
     campaignId: string | null,
+    searchIndustry?: string | null,
 ): NormalizedLead | null {
     const linkedinUrl =
         (raw.linkedin_url as string) ??
@@ -81,6 +83,12 @@ export function normalizeLead(
             (raw.title as string) ??
             null,
         email,
+        industry:
+            (raw.company_industry as string) ??
+            (raw.industry as string) ??
+            (raw.companyIndustry as string) ??
+            searchIndustry ??
+            null,
         enrichment_data: raw,
         campaign_id: campaignId,
     };
