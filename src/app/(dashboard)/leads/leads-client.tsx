@@ -24,11 +24,11 @@ import {
     Square,
     MinusSquare,
 } from 'lucide-react';
-import type { Lead } from '@/types';
+import type { Lead, Campaign } from '@/types';
 
 type LeadStats = Record<string, number>;
 
-export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lead[]; stats: LeadStats }) {
+export default function LeadsClient({ leads: initialLeads, stats, campaigns }: { leads: Lead[]; stats: LeadStats; campaigns: Campaign[] }) {
     const router = useRouter();
     const [leads, setLeads] = useState(initialLeads);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -43,6 +43,32 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
     // Multi-select state
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [bulkLoading, setBulkLoading] = useState(false);
+    const [showCampaignMenu, setShowCampaignMenu] = useState(false);
+
+    const handleAssignToCampaign = async (campaignId: string) => {
+        if (selectedIds.size === 0) return;
+        setBulkLoading(true);
+        setShowCampaignMenu(false);
+        try {
+            const res = await fetch(`/api/campaigns/${campaignId}/add-leads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'ids', leadIds: Array.from(selectedIds) }),
+            });
+            if (res.ok) {
+                const { added } = await res.json();
+                // Update local state to reflect the campaign assignment
+                setLeads(prev => prev.map(l =>
+                    selectedIds.has(l.id) ? { ...l, campaign_id: campaignId } : l
+                ));
+                clearSelection();
+            }
+        } catch {
+            // silent
+        } finally {
+            setBulkLoading(false);
+        }
+    };
 
     const handlePreview = (lead: Lead, e: React.MouseEvent) => {
         e.stopPropagation();
@@ -289,7 +315,7 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
 
             {/* Bulk Action Bar */}
             {selectedIds.size > 0 && (
-                <div className="card p-4 flex flex-col sm:flex-row items-center gap-4 border-primary-200/50 bg-gradient-to-r from-primary-50/50 to-white animate-in fade-in duration-300 sticky top-4 z-40">
+                <div className="bg-white dark:bg-slate-800 border border-primary-200/50 dark:border-slate-600 rounded-2xl p-4 flex flex-col sm:flex-row items-center gap-4 bg-gradient-to-r from-primary-50/50 to-white dark:from-slate-800 dark:to-slate-800 animate-in fade-in duration-300 sticky top-4 z-40 shadow-lg">
                     <div className="flex items-center gap-3 flex-1">
                         <CheckSquare size={18} className="text-primary-600" />
                         <span className="text-sm font-black text-slate-900">
@@ -310,6 +336,41 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
                                 {s}
                             </button>
                         ))}
+                        <div className="w-px h-6 bg-secondary-200 mx-1" />
+                        {/* Assign to Campaign */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowCampaignMenu(!showCampaignMenu)}
+                                disabled={bulkLoading}
+                                className="px-4 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border border-primary-200 bg-white text-primary-600 hover:bg-primary-50 transition-all disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                                <Target size={12} />
+                                Assign to Campaign
+                            </button>
+                            {showCampaignMenu && (
+                                <>
+                                    <div className="fixed inset-0 z-[60]" onClick={() => setShowCampaignMenu(false)} />
+                                    <div className="absolute top-full mt-2 right-0 bg-white dark:bg-slate-800 border border-secondary-200 dark:border-slate-600 rounded-2xl shadow-2xl z-[70] py-2 min-w-[220px] max-h-[300px] overflow-y-auto custom-scrollbar">
+                                        {campaigns.filter(c => c.status !== 'completed').length === 0 ? (
+                                            <p className="px-4 py-3 text-xs text-secondary-400 font-medium">No active campaigns. Create one first.</p>
+                                        ) : (
+                                            campaigns
+                                                .filter(c => c.status !== 'completed')
+                                                .map(c => (
+                                                    <button
+                                                        key={c.id}
+                                                        onClick={() => handleAssignToCampaign(c.id)}
+                                                        className="w-full px-4 py-2.5 text-left hover:bg-primary-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-2"
+                                                    >
+                                                        <Target size={14} className="text-primary-500 shrink-0" />
+                                                        <span className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate">{c.name}</span>
+                                                    </button>
+                                                ))
+                                        )}
+                                    </div>
+                                </>
+                            )}
+                        </div>
                         <div className="w-px h-6 bg-secondary-200 mx-1" />
                         <button
                             onClick={handleBulkDelete}
@@ -358,6 +419,7 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
                                     </th>
                                     <th className="p-6">Identity</th>
                                     <th className="p-6">Stage</th>
+                                    <th className="p-6">Industry</th>
                                     <th className="p-6">Company</th>
                                     <th className="p-6">Location</th>
                                     <th className="p-6">Latest Touch</th>
@@ -410,6 +472,13 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
                                             </td>
                                             <td className="p-6">
                                                 <StageBadge stage={lead.status} />
+                                            </td>
+                                            <td className="p-6">
+                                                {lead.industry ? (
+                                                    <IndustryBadge industry={lead.industry} />
+                                                ) : (
+                                                    <span className="text-xs text-secondary-400">—</span>
+                                                )}
                                             </td>
                                             <td className="p-6">
                                                 <span className="text-sm font-bold text-slate-700">{lead.company_name ?? '—'}</span>
@@ -527,6 +596,15 @@ export default function LeadsClient({ leads: initialLeads, stats }: { leads: Lea
                                     <div>
                                         <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Location</span>
                                         <p className="font-bold text-slate-900 mt-1">{selectedLead.location ?? '—'}</p>
+                                    </div>
+                                    <div>
+                                        <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Industry</span>
+                                        <div className="mt-1">
+                                            {selectedLead.industry
+                                                ? <IndustryBadge industry={selectedLead.industry} />
+                                                : <span className="font-bold text-slate-900">—</span>
+                                            }
+                                        </div>
                                     </div>
                                 </div>
                                 {selectedLead.linkedin_url && (
@@ -691,5 +769,48 @@ function DetailBadge({ icon, label, color }: { icon: React.ReactNode; label: str
         <div className={`flex items-center gap-2 px-3 py-1.5 bg-white border border-secondary-200 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-sm ${color}`}>
             {icon} {label}
         </div>
+    );
+}
+
+const INDUSTRY_COLORS: Record<string, string> = {
+    automotive: 'bg-red-50 text-red-700 border-red-200',
+    'real estate': 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    banking: 'bg-amber-50 text-amber-700 border-amber-200',
+    'financial services': 'bg-amber-50 text-amber-700 border-amber-200',
+    insurance: 'bg-amber-50 text-amber-700 border-amber-200',
+    'computer software': 'bg-blue-50 text-blue-700 border-blue-200',
+    'information technology and services': 'bg-blue-50 text-blue-700 border-blue-200',
+    internet: 'bg-blue-50 text-blue-700 border-blue-200',
+    'hospital & health care': 'bg-pink-50 text-pink-700 border-pink-200',
+    'health, wellness and fitness': 'bg-pink-50 text-pink-700 border-pink-200',
+    pharmaceuticals: 'bg-pink-50 text-pink-700 border-pink-200',
+    construction: 'bg-orange-50 text-orange-700 border-orange-200',
+    'building materials': 'bg-orange-50 text-orange-700 border-orange-200',
+    'marketing and advertising': 'bg-purple-50 text-purple-700 border-purple-200',
+    'management consulting': 'bg-purple-50 text-purple-700 border-purple-200',
+    retail: 'bg-teal-50 text-teal-700 border-teal-200',
+    'food & beverages': 'bg-teal-50 text-teal-700 border-teal-200',
+    hospitality: 'bg-teal-50 text-teal-700 border-teal-200',
+    'oil & energy': 'bg-slate-100 text-slate-700 border-slate-300',
+    'mining & metals': 'bg-slate-100 text-slate-700 border-slate-300',
+    education: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    'education management': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+    'e-learning': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+};
+
+function formatIndustryLabel(industry: string): string {
+    return industry
+        .split(/[\s/]+/)
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+}
+
+function IndustryBadge({ industry }: { industry: string }) {
+    const key = industry.toLowerCase();
+    const colors = INDUSTRY_COLORS[key] ?? 'bg-sky-50 text-sky-700 border-sky-200';
+    return (
+        <span className={`inline-flex px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border ${colors}`}>
+            {formatIndustryLabel(industry)}
+        </span>
     );
 }

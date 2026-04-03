@@ -141,6 +141,11 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                             {lead.source && (
                                 <InfoBadge icon={<Globe size={12} />} text={lead.source} />
                             )}
+                            {lead.industry && (
+                                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary-50 text-primary-700 border border-primary-200/50 text-[10px] font-black uppercase tracking-widest">
+                                    {lead.industry.split(/[\s/]+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                                </span>
+                            )}
                             <StageBadge stage={lead.status} />
                         </div>
                     </div>
