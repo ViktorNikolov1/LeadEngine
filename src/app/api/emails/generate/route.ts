@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v4';
-import { createServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 import { generateOutreachEmail, isGeminiConfigured } from '@/lib/ai/gemini';
 
 const generateSchema = z.object({
@@ -11,6 +11,10 @@ const generateSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         if (!isGeminiConfigured()) {
             return NextResponse.json({ error: 'AI service not configured. Set GEMINI_API_KEY in environment.' }, { status: 503 });
@@ -23,12 +27,12 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        // Fetch lead data
-        const supabase = createServerClient();
+        // Fetch lead ensuring it belongs to the user
         const { data: lead } = await supabase
             .from('leads')
             .select('*')
             .eq('id', parsed.data.lead_id)
+            .eq('user_id', user.id)
             .single();
 
         if (!lead) {

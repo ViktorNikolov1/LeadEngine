@@ -39,12 +39,21 @@ export async function updateSession(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Public routes that don't require auth
-    const isAuthRoute = pathname === '/login' || pathname === '/register';
-    const isApiRoute = pathname.startsWith('/api/');
+    const isAuthRoute = pathname === '/login';
+
+    // Block registration — redirect to login
+    if (pathname === '/register') {
+        const url = request.nextUrl.clone();
+        url.pathname = '/login';
+        return NextResponse.redirect(url);
+    }
     const isStaticAsset = pathname.startsWith('/_next/') || pathname.startsWith('/favicon');
 
-    // Allow API routes and static assets through
-    if (isApiRoute || isStaticAsset) {
+    // Public API routes that don't require auth (webhooks need external access)
+    const isPublicApi = pathname.startsWith('/api/webhooks') || pathname.startsWith('/api/auth/');
+
+    // Allow static assets and public APIs through
+    if (isStaticAsset || isPublicApi) {
         return supabaseResponse;
     }
 

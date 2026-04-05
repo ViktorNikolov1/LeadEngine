@@ -1,17 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
+import { createClient } from '@supabase/supabase-js';
+
+const updateProfileSchema = z.object({
+    full_name: z.string().min(1).max(200),
+});
 
 export async function PATCH(request: NextRequest) {
-    try {
-        const { userId, full_name } = await request.json();
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { user } = auth;
 
-        if (!userId || !full_name) {
-            return NextResponse.json({ error: 'User ID and full name are required' }, { status: 400 });
+    try {
+        const body = await request.json();
+        const parsed = updateProfileSchema.safeParse(body);
+
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        const supabase = createServerClient();
-        const { error } = await supabase.auth.admin.updateUserById(userId, {
-            user_metadata: { full_name },
+        // Use admin client to update user metadata — always use the authenticated user's own ID
+        const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+        const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+        const adminClient = createClient(supabaseUrl, serviceKey);
+
+        const { error } = await adminClient.auth.admin.updateUserById(user.id, {
+            user_metadata: { full_name: parsed.data.full_name },
         });
 
         if (error) {

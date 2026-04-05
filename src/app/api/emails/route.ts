@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v4';
-import { createServerClient, fetchEmails, createEmail } from '@/lib/supabase/server';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
 const createEmailSchema = z.object({
     lead_id: z.uuid(),
@@ -13,19 +13,46 @@ const createEmailSchema = z.object({
 });
 
 export async function GET(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         const { searchParams } = new URL(request.url);
-        const status = searchParams.get('status') ?? undefined;
-        const search = searchParams.get('search') ?? undefined;
+        const status = searchParams.get('status');
+        const search = searchParams.get('search');
 
-        const emails = await fetchEmails({ status, search });
-        return NextResponse.json({ emails });
+        let query = supabase
+            .from('emails')
+            .select('*, lead:leads(id, full_name, email, company_name, job_title)')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false });
+
+        if (status) {
+            query = query.eq('status', status);
+        }
+        if (search) {
+            query = query.or(`subject.ilike.%${search}%,to_email.ilike.%${search}%`);
+        }
+
+        const { data, error } = await query;
+
+        if (error) {
+            console.error('Error fetching emails:', error);
+            return NextResponse.json({ error: 'Failed to fetch emails' }, { status: 500 });
+        }
+
+        return NextResponse.json({ emails: data ?? [] });
     } catch {
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         const body = await request.json();
         const parsed = createEmailSchema.safeParse(body);
@@ -34,21 +61,26 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        // Verify the lead exists and has an email
-        const supabase = createServerClient();
+        // Verify the lead belongs to the user
         const { data: lead } = await supabase
             .from('leads')
             .select('id, email')
             .eq('id', parsed.data.lead_id)
+            .eq('user_id', user.id)
             .single();
 
         if (!lead) {
             return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
         }
 
-        const email = await createEmail(parsed.data);
+        const { data: email, error } = await supabase
+            .from('emails')
+            .insert({ ...parsed.data, status: 'draft', user_id: user.id })
+            .select()
+            .single();
 
-        if (!email) {
+        if (error) {
+            console.error('Error creating email:', error);
             return NextResponse.json({ error: 'Failed to create email' }, { status: 500 });
         }
 

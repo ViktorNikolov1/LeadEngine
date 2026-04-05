@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
 export async function GET(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
-        const supabase = createServerClient();
         const { data, error } = await supabase
             .from('leads')
             .select('*')
+            .eq('user_id', user.id)
             .order('created_at', { ascending: false });
 
         if (error) {

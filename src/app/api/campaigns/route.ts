@@ -1,23 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
+
+const createCampaignSchema = z.object({
+    name: z.string().min(1).max(200),
+    target_leads: z.number().int().min(1).max(1_000_000).nullable().optional(),
+    search_criteria: z.record(z.string(), z.unknown()).nullable().optional(),
+});
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         const body = await request.json();
-        const { name, target_leads, search_criteria } = body;
+        const parsed = createCampaignSchema.safeParse(body);
 
-        if (!name) {
-            return NextResponse.json({ error: 'Campaign name is required' }, { status: 400 });
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        const supabase = createServerClient();
         const { data, error } = await supabase
             .from('campaigns')
             .insert({
-                name,
-                target_leads: target_leads ?? null,
-                search_criteria: search_criteria ?? null,
+                name: parsed.data.name,
+                target_leads: parsed.data.target_leads ?? null,
+                search_criteria: parsed.data.search_criteria ?? null,
                 status: 'active',
+                user_id: user.id,
             })
             .select()
             .single();

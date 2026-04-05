@@ -1,22 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
-type AddLeadsBody =
-    | { mode: 'industry'; industry: string }
-    | { mode: 'ids'; leadIds: string[] }
-    | { mode: 'unassigned' };
+const addByIndustrySchema = z.object({ mode: z.literal('industry'), industry: z.string().min(1) });
+const addByIdsSchema = z.object({ mode: z.literal('ids'), leadIds: z.array(z.uuid()).min(1).max(500) });
+const addUnassignedSchema = z.object({ mode: z.literal('unassigned') });
+const addLeadsSchema = z.union([addByIndustrySchema, addByIdsSchema, addUnassignedSchema]);
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         const { id: campaignId } = await params;
-        const body = (await request.json()) as AddLeadsBody;
-        const supabase = createServerClient();
+        const body = await request.json();
+        const parsed = addLeadsSchema.safeParse(body);
 
-        // Verify campaign exists
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
+        }
+
+        // Verify campaign belongs to user
         const { data: campaign, error: campError } = await supabase
             .from('campaigns')
             .select('id')
             .eq('id', campaignId)
+            .eq('user_id', user.id)
             .single();
 
         if (campError || !campaign) {
@@ -25,41 +35,25 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
         let result;
 
-        if (body.mode === 'industry') {
-            // Add all leads matching a specific industry
+        if (parsed.data.mode === 'industry') {
             const { data, error } = await supabase
                 .from('leads')
                 .update({ campaign_id: campaignId })
-                .ilike('industry', body.industry)
+                .ilike('industry', parsed.data.industry)
                 .is('campaign_id', null)
+                .eq('user_id', user.id)
                 .select('id');
 
             if (error) {
                 return NextResponse.json({ error: error.message }, { status: 500 });
             }
             result = data;
-        } else if (body.mode === 'ids') {
-            // Add specific leads by ID
-            if (!body.leadIds || body.leadIds.length === 0) {
-                return NextResponse.json({ error: 'No lead IDs provided' }, { status: 400 });
-            }
-
+        } else if (parsed.data.mode === 'ids') {
             const { data, error } = await supabase
                 .from('leads')
                 .update({ campaign_id: campaignId })
-                .in('id', body.leadIds)
-                .select('id');
-
-            if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
-            }
-            result = data;
-        } else if (body.mode === 'unassigned') {
-            // Add all unassigned leads
-            const { data, error } = await supabase
-                .from('leads')
-                .update({ campaign_id: campaignId })
-                .is('campaign_id', null)
+                .in('id', parsed.data.leadIds)
+                .eq('user_id', user.id)
                 .select('id');
 
             if (error) {
@@ -67,7 +61,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             }
             result = data;
         } else {
-            return NextResponse.json({ error: 'Invalid mode' }, { status: 400 });
+            // unassigned
+            const { data, error } = await supabase
+                .from('leads')
+                .update({ campaign_id: campaignId })
+                .is('campaign_id', null)
+                .eq('user_id', user.id)
+                .select('id');
+
+            if (error) {
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+            result = data;
         }
 
         return NextResponse.json({

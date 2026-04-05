@@ -3,6 +3,7 @@
 
 export type Campaign = {
     id: string;
+    user_id: string | null;
     name: string;
     search_criteria: Record<string, unknown> | null;
     status: 'active' | 'paused' | 'completed';
@@ -13,6 +14,7 @@ export type Campaign = {
 
 export type Lead = {
     id: string;
+    user_id: string | null;
     campaign_id: string | null;
     linkedin_url: string;
     email: string | null;
