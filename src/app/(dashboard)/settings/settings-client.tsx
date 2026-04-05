@@ -19,7 +19,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
             const res = await fetch('/api/settings/profile', {
                 method: 'PATCH',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, full_name: name }),
+                body: JSON.stringify({ full_name: name }),
             });
             if (!res.ok) {
                 const data = await res.json();

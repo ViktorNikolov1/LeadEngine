@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 import { parseSearchQuery } from '@/lib/ai/parseSearchQuery';
 
-export async function POST(request: NextRequest) {
-    try {
-        const { query } = (await request.json()) as { query?: string };
+const parseQuerySchema = z.object({
+    query: z.string().min(5).max(1000),
+});
 
-        if (!query || query.trim().length < 5) {
-            return NextResponse.json(
-                { error: 'Please provide a more detailed search description' },
-                { status: 400 },
-            );
+export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
+    try {
+        const body = await request.json();
+        const parsed = parseQuerySchema.safeParse(body);
+
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Please provide a more detailed search description' }, { status: 400 });
         }
 
-        const filters = await parseSearchQuery(query.trim());
+        const filters = await parseSearchQuery(parsed.data.query.trim());
 
         return NextResponse.json({ filters });
     } catch (err) {

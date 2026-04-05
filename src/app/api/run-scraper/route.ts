@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 import {
     runApifyActor,
     waitForActorRun,
@@ -8,65 +9,66 @@ import {
     type NormalizedLead,
 } from '@/lib/apify';
 
-type ScrapeRequestBody = {
-    campaignId?: string | null;
-    fetchCount?: number;
-    fileName?: string;
-    jobTitles?: string[];
-    excludeJobTitles?: string[];
-    seniorityLevel?: string | null;
-    functionalLevel?: string | null;
-    contactLocation?: string | null;
-    contactCities?: string[];
-    excludeLocation?: string | null;
-    excludeCities?: string[];
-    emailStatus?: string[];
-    companyDomains?: string[];
-    companySize?: string | null;
-    industry?: string | null;
-    excludeIndustry?: string | null;
-    companyKeywords?: string[];
-    excludeCompanyKeywords?: string[];
-    minRevenue?: string | null;
-    maxRevenue?: string | null;
-    funding?: string | null;
-};
+const scrapeSchema = z.object({
+    campaignId: z.uuid().nullable().optional(),
+    fetchCount: z.number().int().min(1).max(100_000).optional().default(10),
+    fileName: z.string().max(200).optional().default('Prospects'),
+    jobTitles: z.array(z.string().max(200)).optional().default([]),
+    excludeJobTitles: z.array(z.string().max(200)).optional().default([]),
+    seniorityLevel: z.string().max(100).nullable().optional(),
+    functionalLevel: z.string().max(100).nullable().optional(),
+    contactLocation: z.string().max(200).nullable().optional(),
+    contactCities: z.array(z.string().max(200)).optional().default([]),
+    excludeLocation: z.string().max(200).nullable().optional(),
+    excludeCities: z.array(z.string().max(200)).optional().default([]),
+    emailStatus: z.array(z.string().max(50)).optional().default(['validated']),
+    companyDomains: z.array(z.string().max(300)).optional().default([]),
+    companySize: z.string().max(100).nullable().optional(),
+    industry: z.string().max(200).nullable().optional(),
+    excludeIndustry: z.string().max(200).nullable().optional(),
+    companyKeywords: z.array(z.string().max(200)).optional().default([]),
+    excludeCompanyKeywords: z.array(z.string().max(200)).optional().default([]),
+    minRevenue: z.string().max(50).nullable().optional(),
+    maxRevenue: z.string().max(50).nullable().optional(),
+    funding: z.string().max(100).nullable().optional(),
+});
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
-        const body = (await request.json()) as ScrapeRequestBody;
+        const body = await request.json();
+        const parsed = scrapeSchema.safeParse(body);
+
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
+        }
 
         const {
             campaignId = null,
-            fetchCount = 10,
-            fileName = 'Prospects',
-            jobTitles = [],
-            excludeJobTitles = [],
+            fetchCount,
+            fileName,
+            jobTitles,
+            excludeJobTitles,
             seniorityLevel = null,
             functionalLevel = null,
             contactLocation = null,
-            contactCities = [],
+            contactCities,
             excludeLocation = null,
-            excludeCities = [],
-            emailStatus = ['validated'],
-            companyDomains = [],
+            excludeCities,
+            emailStatus,
+            companyDomains,
             companySize = null,
             industry = null,
             excludeIndustry = null,
-            companyKeywords = [],
-            excludeCompanyKeywords = [],
+            companyKeywords,
+            excludeCompanyKeywords,
             minRevenue = null,
             maxRevenue = null,
             funding = null,
-        } = body;
-
-        // --- Validate ---
-        if (fetchCount < 1 || fetchCount > 100_000) {
-            return NextResponse.json(
-                { error: 'fetchCount must be between 1 and 100000' },
-                { status: 400 },
-            );
-        }
+        } = parsed.data;
 
         const hasFilter = jobTitles.length > 0 || contactLocation || contactCities.length > 0
             || industry || companyDomains.length > 0 || companyKeywords.length > 0
@@ -79,15 +81,24 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const supabase = createServerClient();
+        // If campaignId is provided, verify it belongs to the user
+        if (campaignId) {
+            const { data: campaign } = await supabase
+                .from('campaigns')
+                .select('id')
+                .eq('id', campaignId)
+                .eq('user_id', user.id)
+                .single();
 
-        // --- 1. Build actor input matching IoSHqwTR9YGhzccez schema ---
+            if (!campaign) {
+                return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
+            }
+        }
+
+        // Build actor input
         const toNullableArr = (arr: string[]) => arr.length > 0 ? arr : null;
-
-        // Helper: wrap a single string into a single-element array for the actor
         const toArr = (val: string | null) => val ? [val] : null;
 
-        // Build input, omitting null/undefined values so the actor doesn't receive invalid fields
         const rawInput: Record<string, unknown> = {
             fetch_count: fetchCount,
             file_name: fileName,
@@ -111,7 +122,6 @@ export async function POST(request: NextRequest) {
             funding: toArr(funding),
         };
 
-        // Strip null/undefined values — the actor rejects null for array fields
         const actorInput: Record<string, unknown> = {};
         for (const [key, value] of Object.entries(rawInput)) {
             if (value !== null && value !== undefined) {
@@ -119,21 +129,22 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // --- 2. Trigger the Apify Actor ---
+        // Trigger the Apify Actor
         const { runId, datasetId: initialDatasetId } = await runApifyActor(actorInput);
 
-        // Log the run as started
+        // Log the run
         await supabase.from('runs').insert({
             campaign_id: campaignId,
             apify_run_id: runId,
             leads_processed: 0,
             status: 'started',
+            user_id: user.id,
         });
 
-        // --- 3. Wait for Actor to finish ---
+        // Wait for Actor to finish
         const { datasetId } = await waitForActorRun(runId);
 
-        // --- 4. Fetch dataset results ---
+        // Fetch dataset results
         const rawItems = await fetchDatasetItems(datasetId ?? initialDatasetId);
 
         if (rawItems.length === 0) {
@@ -149,10 +160,11 @@ export async function POST(request: NextRequest) {
             });
         }
 
-        // --- 5. Normalize and insert into Supabase ---
+        // Normalize and insert
         const leads = rawItems
             .map((item) => normalizeLead(item, campaignId, industry))
-            .filter((lead): lead is NormalizedLead => lead !== null);
+            .filter((lead): lead is NormalizedLead => lead !== null)
+            .map(lead => ({ ...lead, user_id: user.id }));
 
         const { data: savedLeads, error: insertError } = await supabase
             .from('leads')
@@ -173,7 +185,7 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // --- 6. Update run log ---
+        // Update run log
         await supabase
             .from('runs')
             .update({
@@ -182,7 +194,6 @@ export async function POST(request: NextRequest) {
             })
             .eq('apify_run_id', runId);
 
-        // --- 7. Return results ---
         return NextResponse.json({
             message: `Successfully scraped and saved ${savedLeads?.length ?? 0} leads`,
             runId,
@@ -190,10 +201,7 @@ export async function POST(request: NextRequest) {
         });
     } catch (err) {
         console.error('Run scraper error:', err);
-
-        const message =
-            err instanceof Error ? err.message : 'Internal server error';
-
+        const message = err instanceof Error ? err.message : 'Internal server error';
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }

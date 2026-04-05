@@ -1,30 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { z } from 'zod/v4';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
-type BulkAction =
-    | { action: 'delete'; ids: string[] }
-    | { action: 'status'; ids: string[]; status: string };
+const bulkDeleteSchema = z.object({
+    action: z.literal('delete'),
+    ids: z.array(z.uuid()).min(1).max(500),
+});
+
+const bulkStatusSchema = z.object({
+    action: z.literal('status'),
+    ids: z.array(z.uuid()).min(1).max(500),
+    status: z.enum(['new', 'enriched', 'contacted', 'replied', 'disqualified']),
+});
+
+const bulkCampaignSchema = z.object({
+    action: z.literal('assign_campaign'),
+    ids: z.array(z.uuid()).min(1).max(500),
+    campaignId: z.uuid(),
+});
+
+const bulkSchema = z.union([bulkDeleteSchema, bulkStatusSchema, bulkCampaignSchema]);
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
-        const body = (await request.json()) as BulkAction;
-        const { action, ids } = body;
+        const body = await request.json();
+        const parsed = bulkSchema.safeParse(body);
 
-        if (!ids || ids.length === 0) {
-            return NextResponse.json({ error: 'No lead IDs provided' }, { status: 400 });
+        if (!parsed.success) {
+            return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        if (ids.length > 500) {
-            return NextResponse.json({ error: 'Maximum 500 leads per bulk operation' }, { status: 400 });
-        }
-
-        const supabase = createServerClient();
+        const { action, ids } = parsed.data;
 
         if (action === 'delete') {
             const { error } = await supabase
                 .from('leads')
                 .delete()
-                .in('id', ids);
+                .in('id', ids)
+                .eq('user_id', user.id);
 
             if (error) {
                 return NextResponse.json({ error: error.message }, { status: 500 });
@@ -34,15 +51,11 @@ export async function POST(request: NextRequest) {
         }
 
         if (action === 'status') {
-            const validStatuses = ['new', 'enriched', 'contacted', 'replied', 'disqualified'];
-            if (!validStatuses.includes(body.status)) {
-                return NextResponse.json({ error: 'Invalid status' }, { status: 400 });
-            }
-
             const { data, error } = await supabase
                 .from('leads')
-                .update({ status: body.status })
+                .update({ status: parsed.data.status })
                 .in('id', ids)
+                .eq('user_id', user.id)
                 .select();
 
             if (error) {
@@ -50,6 +63,21 @@ export async function POST(request: NextRequest) {
             }
 
             return NextResponse.json({ success: true, affected: data?.length ?? 0, leads: data });
+        }
+
+        if (action === 'assign_campaign') {
+            const { data, error } = await supabase
+                .from('leads')
+                .update({ campaign_id: parsed.data.campaignId })
+                .in('id', ids)
+                .eq('user_id', user.id)
+                .select();
+
+            if (error) {
+                return NextResponse.json({ error: error.message }, { status: 500 });
+            }
+
+            return NextResponse.json({ success: true, affected: data?.length ?? 0 });
         }
 
         return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

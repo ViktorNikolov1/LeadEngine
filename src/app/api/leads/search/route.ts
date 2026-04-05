@@ -1,15 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
 export async function GET(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     const { searchParams } = new URL(request.url);
     const jobTitle = searchParams.get('jobTitle');
     const location = searchParams.get('location');
     const industry = searchParams.get('industry');
 
     try {
-        const supabase = createServerClient();
-        let query = supabase.from('leads').select('*');
+        let query = supabase.from('leads').select('*').eq('user_id', user.id);
 
         if (jobTitle) {
             query = query.ilike('job_title', `%${jobTitle}%`);

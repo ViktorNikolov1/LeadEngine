@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createServerClient } from '@/lib/supabase/server';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
 type ParsedLead = {
     linkedin_url: string;
@@ -15,10 +15,11 @@ type ParsedLead = {
     industry: string | null;
     source: string;
     campaign_id: string | null;
+    user_id: string;
 };
 
 // Map common CSV header variations to our schema fields
-const COLUMN_MAP: Record<string, keyof ParsedLead> = {
+const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id' | 'user_id'>> = {
     // LinkedIn URL
     'linkedin_url': 'linkedin_url',
     'linkedin url': 'linkedin_url',
@@ -150,7 +151,12 @@ function parseCSV(text: string): Record<string, string>[] {
     return rows;
 }
 
-function mapRow(row: Record<string, string>, campaignId: string | null, defaultIndustry: string | null): ParsedLead | null {
+function mapRow(
+    row: Record<string, string>,
+    campaignId: string | null,
+    defaultIndustry: string | null,
+    userId: string,
+): ParsedLead | null {
     const mapped: Partial<ParsedLead> = {};
 
     for (const [csvHeader, value] of Object.entries(row)) {
@@ -158,7 +164,7 @@ function mapRow(row: Record<string, string>, campaignId: string | null, defaultI
         const normalized = csvHeader.toLowerCase().trim();
         const field = COLUMN_MAP[normalized];
         if (field) {
-            mapped[field] = value;
+            (mapped as Record<string, string>)[field] = value;
         }
     }
 
@@ -189,10 +195,15 @@ function mapRow(row: Record<string, string>, campaignId: string | null, defaultI
         industry: mapped.industry ?? defaultIndustry ?? null,
         source: 'import',
         campaign_id: campaignId,
+        user_id: userId,
     };
 }
 
 export async function POST(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+    const { supabase, user } = auth;
+
     try {
         const formData = await request.formData();
         const file = formData.get('file') as File | null;
@@ -232,7 +243,7 @@ export async function POST(request: NextRequest) {
 
         // Map and filter
         const leads = rows
-            .map(row => mapRow(row, campaignId || null, defaultIndustry))
+            .map(row => mapRow(row, campaignId || null, defaultIndustry, user.id))
             .filter((lead): lead is ParsedLead => lead !== null);
 
         if (leads.length === 0) {
@@ -243,7 +254,6 @@ export async function POST(request: NextRequest) {
         }
 
         // Insert in batches of 500
-        const supabase = createServerClient();
         let totalSaved = 0;
         const batchSize = 500;
 
