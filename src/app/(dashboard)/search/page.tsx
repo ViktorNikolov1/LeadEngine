@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, type KeyboardEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { useRouter } from 'next/navigation';
 import {
     Search as SearchIcon,
@@ -927,15 +928,40 @@ function SelectField({ label, value, onChange, options }: { label: string; value
 function MultiSelectField({ label, selected, onChange, options }: { label: string; selected: string[]; onChange: (v: string[]) => void; options: { value: string; label: string }[] }) {
     const [isOpen, setIsOpen] = useState(false);
     const btnRef = useRef<HTMLButtonElement>(null);
+    const dropdownRef = useRef<HTMLDivElement>(null);
     const [pos, setPos] = useState({ top: 0, left: 0, width: 0 });
     const available = options.filter(opt => opt.value && !selected.includes(opt.value));
 
+    // Recalculate position every time the dropdown opens or selection changes
     useEffect(() => {
-        if (isOpen && btnRef.current) {
-            const rect = btnRef.current.getBoundingClientRect();
+        if (!isOpen || !btnRef.current) return;
+        const update = () => {
+            const rect = btnRef.current!.getBoundingClientRect();
             setPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
-        }
-    }, [isOpen, selected.length]);
+        };
+        update();
+        window.addEventListener('scroll', update, true);
+        window.addEventListener('resize', update);
+        return () => {
+            window.removeEventListener('scroll', update, true);
+            window.removeEventListener('resize', update);
+        };
+    }, [isOpen]);
+
+    // Close on outside click
+    useEffect(() => {
+        if (!isOpen) return;
+        const handler = (e: Event) => {
+            const target = e.target as Node;
+            if (
+                btnRef.current?.contains(target) ||
+                dropdownRef.current?.contains(target)
+            ) return;
+            setIsOpen(false);
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [isOpen]);
 
     const toggle = (value: string) => {
         if (selected.includes(value)) {
@@ -975,30 +1001,29 @@ function MultiSelectField({ label, selected, onChange, options }: { label: strin
                 </span>
                 <ChevronDown size={14} className={`text-secondary-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
             </button>
-            {/* Dropdown list — fixed position to escape overflow-hidden */}
-            {isOpen && (
-                <>
-                    <div className="fixed inset-0 z-[80]" onClick={() => setIsOpen(false)} />
-                    <div
-                        className="fixed z-[90] bg-white border border-secondary-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto"
-                        style={{ top: pos.top, left: pos.left, width: pos.width }}
-                    >
-                        {available.length === 0 ? (
-                            <div className="px-3 py-2 text-xs text-secondary-400">All options selected</div>
-                        ) : (
-                            available.map(opt => (
-                                <button
-                                    key={opt.value}
-                                    type="button"
-                                    onClick={() => toggle(opt.value)}
-                                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors"
-                                >
-                                    {opt.label}
-                                </button>
-                            ))
-                        )}
-                    </div>
-                </>
+            {/* Dropdown rendered via portal on document.body — escapes all overflow parents */}
+            {isOpen && createPortal(
+                <div
+                    ref={dropdownRef}
+                    className="bg-white border border-secondary-200 rounded-xl shadow-2xl max-h-52 overflow-y-auto"
+                    style={{ position: 'fixed', zIndex: 9999, top: pos.top, left: pos.left, width: pos.width }}
+                >
+                    {available.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-secondary-400">All options selected</div>
+                    ) : (
+                        available.map(opt => (
+                            <button
+                                key={opt.value}
+                                type="button"
+                                onClick={() => toggle(opt.value)}
+                                className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors"
+                            >
+                                {opt.label}
+                            </button>
+                        ))
+                    )}
+                </div>,
+                document.body,
             )}
         </div>
     );
