@@ -36,6 +36,8 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<string | null>(null);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
+    const [filterCampaign, setFilterCampaign] = useState<string | null>(null);
+    const [showCampaignFilter, setShowCampaignFilter] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -138,7 +140,9 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
         const matchesSearch = !searchQuery || [lead.full_name, lead.first_name, lead.last_name, lead.company_name, lead.job_title, lead.email]
             .some(f => f?.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesFilter = !filterStatus || lead.status === filterStatus;
-        return matchesSearch && matchesFilter;
+        const matchesCampaign = !filterCampaign
+            || (filterCampaign === '__unassigned__' ? !lead.campaign_id : lead.campaign_id === filterCampaign);
+        return matchesSearch && matchesFilter && matchesCampaign;
     });
 
     const filteredIds = filteredLeads.map(l => l.id);
@@ -268,8 +272,8 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                 <PipelineStat label="Disqualified" count={stats.disqualified ?? 0} color="bg-emerald-500" delay="400" />
             </div>
 
-            <div className="flex flex-col md:flex-row gap-6">
-                <div className="relative flex-1 group">
+            <div className="flex flex-col md:flex-row gap-4">
+                <div className="relative flex-1 min-w-0 group">
                     <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                     <input
                         type="text"
@@ -279,13 +283,57 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                         className="w-full bg-white/60 backdrop-blur-md border border-secondary-200 rounded-3xl py-4 pl-14 pr-4 transition-all focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none font-bold text-slate-900 shadow-sm"
                     />
                 </div>
-                <div className="relative">
+                <div className="relative shrink-0">
                     <button
-                        onClick={() => setShowFilterMenu(!showFilterMenu)}
-                        className={`flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group ${filterStatus ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
+                        onClick={() => { setShowCampaignFilter(!showCampaignFilter); setShowFilterMenu(false); }}
+                        className={`flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group whitespace-nowrap ${filterCampaign ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
+                    >
+                        <Target size={18} className="text-secondary-400 group-hover:text-primary-500 group-hover:scale-110 transition-all shrink-0" />
+                        <span className="truncate max-w-[140px]">
+                            {filterCampaign
+                                ? filterCampaign === '__unassigned__'
+                                    ? 'Unassigned'
+                                    : campaigns.find(c => c.id === filterCampaign)?.name ?? 'Campaign'
+                                : 'Campaign'}
+                        </span>
+                        {filterCampaign && (
+                            <X size={14} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setFilterCampaign(null); setShowCampaignFilter(false); }} />
+                        )}
+                    </button>
+                    {showCampaignFilter && (
+                        <div className="absolute top-full mt-2 right-0 bg-white border border-secondary-200 rounded-2xl shadow-2xl z-50 py-2 min-w-[220px] max-h-[300px] overflow-y-auto">
+                            <button
+                                onClick={() => { setFilterCampaign('__unassigned__'); setShowCampaignFilter(false); }}
+                                className={`w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest hover:bg-secondary-50 transition-colors ${filterCampaign === '__unassigned__' ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
+                            >
+                                Unassigned
+                            </button>
+                            {campaigns.map(c => (
+                                <button
+                                    key={c.id}
+                                    onClick={() => { setFilterCampaign(c.id); setShowCampaignFilter(false); }}
+                                    className={`w-full px-4 py-2.5 text-left text-xs font-bold truncate hover:bg-secondary-50 transition-colors ${filterCampaign === c.id ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
+                                >
+                                    {c.name}
+                                </button>
+                            ))}
+                            <hr className="my-1 border-secondary-100" />
+                            <button
+                                onClick={() => { setFilterCampaign(null); setShowCampaignFilter(false); }}
+                                className="w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest text-secondary-400 hover:bg-secondary-50 transition-colors"
+                            >
+                                Clear filter
+                            </button>
+                        </div>
+                    )}
+                </div>
+                <div className="relative shrink-0">
+                    <button
+                        onClick={() => { setShowFilterMenu(!showFilterMenu); setShowCampaignFilter(false); }}
+                        className={`flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group whitespace-nowrap ${filterStatus ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
                     >
                         <Filter size={18} className="text-secondary-400 group-hover:text-primary-500 group-hover:scale-110 transition-all" />
-                        {filterStatus ?? 'Filter'}
+                        {filterStatus ?? 'Status'}
                         {filterStatus && (
                             <X size={14} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setFilterStatus(null); setShowFilterMenu(false); }} />
                         )}
@@ -385,8 +433,8 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
             )}
 
             {/* Main Pipeline Table */}
-            <div className="glass-card overflow-hidden shadow-2xl relative">
-                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-500 via-blue-500 to-purple-500"></div>
+            <div className="glass-card shadow-2xl relative rounded-2xl overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary-500 via-blue-500 to-purple-500 z-10"></div>
 
                 {isEmpty ? (
                     <div className="flex flex-col items-center justify-center py-24 text-center">
@@ -403,27 +451,37 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                         </p>
                     </div>
                 ) : (
-                    <div className="overflow-x-auto custom-scrollbar">
-                        <table className="w-full text-left border-collapse">
-                            <thead className="bg-secondary-50/30 border-b border-secondary-200/50 text-secondary-400 text-[9px] uppercase tracking-[0.3em] font-black">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse table-fixed">
+                            <colgroup>
+                                <col className="w-[40px]" />
+                                <col className="w-[25%]" />
+                                <col className="w-[10%]" />
+                                <col className="w-[13%]" />
+                                <col className="w-[14%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[14%]" />
+                            </colgroup>
+                            <thead className="bg-secondary-50/30 border-b border-secondary-200/50 text-secondary-400 text-[9px] uppercase tracking-[0.2em] font-black">
                                 <tr>
-                                    <th className="p-6 pl-6 w-12">
+                                    <th className="px-2 py-3 pl-3">
                                         <button onClick={toggleSelectAll} className="text-secondary-400 hover:text-primary-600 transition-colors">
                                             {allFilteredSelected
-                                                ? <CheckSquare size={18} className="text-primary-600" />
+                                                ? <CheckSquare size={16} className="text-primary-600" />
                                                 : someFilteredSelected
-                                                    ? <MinusSquare size={18} className="text-primary-400" />
-                                                    : <Square size={18} />
+                                                    ? <MinusSquare size={16} className="text-primary-400" />
+                                                    : <Square size={16} />
                                             }
                                         </button>
                                     </th>
-                                    <th className="p-6">Identity</th>
-                                    <th className="p-6">Stage</th>
-                                    <th className="p-6">Industry</th>
-                                    <th className="p-6">Company</th>
-                                    <th className="p-6">Location</th>
-                                    <th className="p-6">Latest Touch</th>
-                                    <th className="p-6 text-right pr-10">Actions</th>
+                                    <th className="px-2 py-3">Identity</th>
+                                    <th className="px-2 py-3">Stage</th>
+                                    <th className="px-2 py-3">Industry</th>
+                                    <th className="px-2 py-3">Company</th>
+                                    <th className="px-2 py-3">Location</th>
+                                    <th className="px-2 py-3">Touch</th>
+                                    <th className="px-2 py-3 text-right pr-3">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-secondary-100/30">
@@ -435,95 +493,95 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                             onClick={() => router.push(`/leads/${lead.id}`)}
                                             className={`group hover:bg-white transition-all cursor-pointer ${isSelected ? 'bg-primary-50/40' : ''} ${selectedLead?.id === lead.id ? 'bg-white shadow-inner' : ''}`}
                                         >
-                                            <td className="p-6 pl-6 w-12">
+                                            <td className="px-2 py-3 pl-3">
                                                 <button onClick={(e) => toggleSelect(lead.id, e)} className="text-secondary-400 hover:text-primary-600 transition-colors">
                                                     {isSelected
-                                                        ? <CheckSquare size={18} className="text-primary-600" />
-                                                        : <Square size={18} />
+                                                        ? <CheckSquare size={16} className="text-primary-600" />
+                                                        : <Square size={16} />
                                                     }
                                                 </button>
                                             </td>
-                                            <td className="p-6">
-                                                <div className="flex items-center gap-5">
-                                                    <div className="relative">
-                                                        <div className="w-12 h-12 rounded-[1.25rem] bg-gradient-to-br from-secondary-50 to-secondary-200 text-secondary-700 flex items-center justify-center text-lg font-black shadow-sm group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
+                                            <td className="px-2 py-3">
+                                                <div className="flex items-center gap-2.5 min-w-0">
+                                                    <div className="relative shrink-0">
+                                                        <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-secondary-50 to-secondary-200 text-secondary-700 flex items-center justify-center text-sm font-black shadow-sm group-hover:scale-105 transition-all duration-500">
                                                             {(lead.full_name ?? lead.first_name ?? '?').charAt(0)}
                                                         </div>
                                                         {lead.linkedin_url && (
-                                                            <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full border-2 border-white flex items-center justify-center text-white shadow-lg bg-[#0077b5]">
-                                                                <Linkedin size={10} />
+                                                            <div className="absolute -top-1 -right-1 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center text-white shadow-lg bg-[#0077b5]">
+                                                                <Linkedin size={8} />
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div>
-                                                        <div className="font-black text-slate-900 group-hover:text-primary-700 transition-colors uppercase tracking-tighter text-base">
+                                                    <div className="min-w-0 overflow-hidden">
+                                                        <div className="font-black text-slate-900 group-hover:text-primary-700 transition-colors uppercase tracking-tighter text-[13px] truncate">
                                                             {lead.full_name ?? (`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Unknown')}
                                                         </div>
-                                                        <div className="flex items-center gap-2 mt-0.5">
-                                                            <span className="text-[10px] font-bold text-secondary-500 uppercase tracking-widest">{lead.job_title ?? lead.headline ?? '—'}</span>
+                                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                                            <span className="text-[9px] font-bold text-secondary-500 uppercase tracking-wider truncate">{lead.job_title ?? lead.headline ?? '—'}</span>
                                                             {lead.linkedin_url && (
-                                                                <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[#0077b5] hover:scale-110 transition-transform">
-                                                                    <Linkedin size={12} />
+                                                                <a href={lead.linkedin_url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="text-[#0077b5] hover:scale-110 transition-transform shrink-0">
+                                                                    <Linkedin size={10} />
                                                                 </a>
                                                             )}
                                                         </div>
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="p-6">
+                                            <td className="px-2 py-3">
                                                 <StageBadge stage={lead.status} />
                                             </td>
-                                            <td className="p-6">
+                                            <td className="px-2 py-3">
                                                 {lead.industry ? (
                                                     <IndustryBadge industry={lead.industry} />
                                                 ) : (
                                                     <span className="text-xs text-secondary-400">—</span>
                                                 )}
                                             </td>
-                                            <td className="p-6">
-                                                <span className="text-sm font-bold text-slate-700">{lead.company_name ?? '—'}</span>
+                                            <td className="px-2 py-3 overflow-hidden">
+                                                <span className="text-xs font-bold text-slate-700 truncate block">{lead.company_name ?? '—'}</span>
                                             </td>
-                                            <td className="p-6">
-                                                <span className="text-sm text-secondary-500">{lead.location ?? '—'}</span>
+                                            <td className="px-2 py-3 overflow-hidden">
+                                                <span className="text-xs text-secondary-500 truncate block">{lead.location ?? '—'}</span>
                                             </td>
-                                            <td className="p-6 font-black text-[10px] text-secondary-400 uppercase tracking-widest whitespace-nowrap">
-                                                <div className="flex items-center gap-2">
-                                                    <History size={14} className="text-secondary-300" />
-                                                    {formatRelativeTime(lead.updated_at)}
+                                            <td className="px-2 py-3">
+                                                <div className="flex items-center gap-1.5 text-[9px] font-black text-secondary-400 uppercase tracking-wider">
+                                                    <History size={12} className="text-secondary-300 shrink-0" />
+                                                    <span className="truncate">{formatRelativeTime(lead.updated_at)}</span>
                                                 </div>
                                             </td>
-                                            <td className="p-6 text-right pr-10">
-                                                <div className="flex items-center justify-end gap-2">
+                                            <td className="px-2 py-3 text-right pr-3">
+                                                <div className="flex items-center justify-end gap-1">
                                                     <button
                                                         onClick={(e) => handlePreview(lead, e)}
-                                                        className="p-2.5 bg-primary-100 text-primary-600 hover:bg-primary-600 hover:text-white rounded-xl transition-all shadow-sm"
+                                                        className="p-1.5 bg-primary-100 text-primary-600 hover:bg-primary-600 hover:text-white rounded-md transition-all"
                                                         title="View Details"
                                                     >
-                                                        <Eye size={16} />
+                                                        <Eye size={14} />
                                                     </button>
                                                     {lead.email && (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); router.push(`/outreach?lead_id=${lead.id}`); }}
-                                                            className="p-2.5 bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white rounded-xl transition-all shadow-sm"
+                                                            className="p-1.5 bg-blue-50 text-blue-500 hover:bg-blue-500 hover:text-white rounded-md transition-all"
                                                             title="Send Email"
                                                         >
-                                                            <Send size={16} />
+                                                            <Send size={14} />
                                                         </button>
                                                     )}
                                                     <button
                                                         onClick={(e) => handleDeleteLead(lead.id, e)}
                                                         disabled={deletingId === lead.id}
-                                                        className="p-2.5 bg-red-50 text-red-400 hover:bg-red-500 hover:text-white rounded-xl transition-all shadow-sm"
+                                                        className="p-1.5 bg-red-50 text-red-400 hover:bg-red-500 hover:text-white rounded-md transition-all"
                                                         title="Delete Lead"
                                                     >
-                                                        {deletingId === lead.id ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                                                        {deletingId === lead.id ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
                                                     </button>
                                                     <div className="relative">
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setActionMenuId(actionMenuId === lead.id ? null : lead.id); }}
-                                                            className="p-2.5 hover:bg-secondary-50 rounded-xl text-secondary-400 hover:text-slate-900 transition-all"
+                                                            className="p-1.5 hover:bg-secondary-50 rounded-md text-secondary-400 hover:text-slate-900 transition-all"
                                                         >
-                                                            <MoreHorizontal size={18} />
+                                                            <MoreHorizontal size={14} />
                                                         </button>
                                                         {actionMenuId === lead.id && (
                                                             <div className="absolute top-full right-0 mt-1 bg-white border border-secondary-200 rounded-xl shadow-2xl z-50 py-1 min-w-[160px]">
