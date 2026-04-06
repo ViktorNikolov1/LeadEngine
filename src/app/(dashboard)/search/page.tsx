@@ -224,22 +224,22 @@ export default function SearchPage() {
     const [fileName, setFileName] = useState('Prospects');
     const [jobTitles, setJobTitles] = useState<string[]>([]);
     const [excludeJobTitles, setExcludeJobTitles] = useState<string[]>([]);
-    const [seniorityLevel, setSeniorityLevel] = useState('');
-    const [functionalLevel, setFunctionalLevel] = useState('');
-    const [contactLocation, setContactLocation] = useState('');
+    const [seniorityLevel, setSeniorityLevel] = useState<string[]>([]);
+    const [functionalLevel, setFunctionalLevel] = useState<string[]>([]);
+    const [contactLocation, setContactLocation] = useState<string[]>([]);
     const [contactCities, setContactCities] = useState<string[]>([]);
-    const [excludeLocation, setExcludeLocation] = useState('');
+    const [excludeLocation, setExcludeLocation] = useState<string[]>([]);
     const [excludeCities, setExcludeCities] = useState<string[]>([]);
     const [emailStatus, setEmailStatus] = useState<string[]>(['validated']);
     const [companyDomains, setCompanyDomains] = useState<string[]>([]);
-    const [companySize, setCompanySize] = useState('');
-    const [industry, setIndustry] = useState('');
-    const [excludeIndustry, setExcludeIndustry] = useState('');
+    const [companySize, setCompanySize] = useState<string[]>([]);
+    const [industry, setIndustry] = useState<string[]>([]);
+    const [excludeIndustry, setExcludeIndustry] = useState<string[]>([]);
     const [companyKeywords, setCompanyKeywords] = useState<string[]>([]);
     const [excludeCompanyKeywords, setExcludeCompanyKeywords] = useState<string[]>([]);
     const [minRevenue, setMinRevenue] = useState('');
     const [maxRevenue, setMaxRevenue] = useState('');
-    const [funding, setFunding] = useState('');
+    const [funding, setFunding] = useState<string[]>([]);
 
     const handleExport = () => {
         if (results.length === 0) return;
@@ -382,9 +382,9 @@ export default function SearchPage() {
                     setResults(data.leads ?? []);
                 }
             } else {
-                const hasFilter = jobTitles.length > 0 || contactLocation || contactCities.length > 0
-                    || industry || companyDomains.length > 0 || companyKeywords.length > 0
-                    || seniorityLevel || functionalLevel;
+                const hasFilter = jobTitles.length > 0 || contactLocation.length > 0 || contactCities.length > 0
+                    || industry.length > 0 || companyDomains.length > 0 || companyKeywords.length > 0
+                    || seniorityLevel.length > 0 || functionalLevel.length > 0;
 
                 if (!hasFilter) {
                     setError('Provide at least one search filter');
@@ -402,22 +402,22 @@ export default function SearchPage() {
                         fileName,
                         jobTitles,
                         excludeJobTitles,
-                        seniorityLevel: seniorityLevel || null,
-                        functionalLevel: functionalLevel || null,
-                        contactLocation: contactLocation || null,
+                        seniorityLevel,
+                        functionalLevel,
+                        contactLocation,
                         contactCities,
-                        excludeLocation: excludeLocation || null,
+                        excludeLocation,
                         excludeCities,
                         emailStatus,
                         companyDomains,
-                        companySize: companySize || null,
-                        industry: industry || null,
-                        excludeIndustry: excludeIndustry || null,
+                        companySize,
+                        industry,
+                        excludeIndustry,
                         companyKeywords,
                         excludeCompanyKeywords,
                         minRevenue: minRevenue || null,
                         maxRevenue: maxRevenue || null,
-                        funding: funding || null,
+                        funding,
                     }),
                 });
 
@@ -677,15 +677,15 @@ export default function SearchPage() {
                                 <div className="space-y-3">
                                     <TagInput label="Include Job Titles" placeholder="e.g. realtor, developer" tags={jobTitles} onChange={setJobTitles} />
                                     <TagInput label="Exclude Job Titles" placeholder="e.g. intern, assistant" tags={excludeJobTitles} onChange={setExcludeJobTitles} />
-                                    <SelectField label="Seniority Level" value={seniorityLevel} onChange={setSeniorityLevel} options={SENIORITY_OPTIONS} />
-                                    <SelectField label="Functional Level" value={functionalLevel} onChange={setFunctionalLevel} options={FUNCTIONAL_LEVEL_OPTIONS} />
+                                    <MultiSelectField label="Seniority Level" selected={seniorityLevel} onChange={setSeniorityLevel} options={SENIORITY_OPTIONS} />
+                                    <MultiSelectField label="Functional Level" selected={functionalLevel} onChange={setFunctionalLevel} options={FUNCTIONAL_LEVEL_OPTIONS} />
                                 </div>
                             </FilterSection>
 
                             {/* Location Include */}
                             <FilterSection icon={<MapPin size={14} className="text-blue-500" />} title="Location (Include)">
                                 <div className="space-y-3">
-                                    <SelectField label="Region / Country / State" value={contactLocation} onChange={setContactLocation} options={LOCATION_OPTIONS} />
+                                    <MultiSelectField label="Region / Country / State" selected={contactLocation} onChange={setContactLocation} options={LOCATION_OPTIONS} />
                                     <TagInput label="City" placeholder="e.g. Berlin, London" tags={contactCities} onChange={setContactCities} />
                                 </div>
                             </FilterSection>
@@ -693,7 +693,7 @@ export default function SearchPage() {
                             {/* Location Exclude */}
                             <FilterSection icon={<MapPin size={14} className="text-red-400" />} title="Location (Exclude)">
                                 <div className="space-y-3">
-                                    <SelectField label="Region / Country / State" value={excludeLocation} onChange={setExcludeLocation} options={LOCATION_OPTIONS} />
+                                    <MultiSelectField label="Region / Country / State" selected={excludeLocation} onChange={setExcludeLocation} options={LOCATION_OPTIONS} />
                                     <TagInput label="City" placeholder="e.g. Paris, Rome" tags={excludeCities} onChange={setExcludeCities} />
                                 </div>
                             </FilterSection>
@@ -727,15 +727,15 @@ export default function SearchPage() {
                             <FilterSection icon={<Building size={14} className="text-purple-500" />} title="Company">
                                 <div className="space-y-3">
                                     <TagInput label="Company Domains" placeholder="e.g. google.com, apple.com" tags={companyDomains} onChange={setCompanyDomains} />
-                                    <SelectField label="Company Size" value={companySize} onChange={setCompanySize} options={COMPANY_SIZE_OPTIONS} />
+                                    <MultiSelectField label="Company Size" selected={companySize} onChange={setCompanySize} options={COMPANY_SIZE_OPTIONS} />
                                 </div>
                             </FilterSection>
 
                             {/* Industry */}
                             <FilterSection icon={<Factory size={14} className="text-amber-500" />} title="Industry">
                                 <div className="space-y-3">
-                                    <SelectField label="Include Industry" value={industry} onChange={setIndustry} options={INDUSTRY_OPTIONS} />
-                                    <SelectField label="Exclude Industry" value={excludeIndustry} onChange={setExcludeIndustry} options={INDUSTRY_OPTIONS} />
+                                    <MultiSelectField label="Include Industry" selected={industry} onChange={setIndustry} options={INDUSTRY_OPTIONS} />
+                                    <MultiSelectField label="Exclude Industry" selected={excludeIndustry} onChange={setExcludeIndustry} options={INDUSTRY_OPTIONS} />
                                 </div>
                             </FilterSection>
 
@@ -757,7 +757,7 @@ export default function SearchPage() {
 
                             {/* Funding */}
                             <FilterSection icon={<Banknote size={14} className="text-violet-500" />} title="Funding">
-                                <SelectField label="Funding Stage" value={funding} onChange={setFunding} options={FUNDING_OPTIONS} />
+                                <MultiSelectField label="Funding Stage" selected={funding} onChange={setFunding} options={FUNDING_OPTIONS} />
                             </FilterSection>
                         </div>
                     )}
@@ -920,6 +920,73 @@ function SelectField({ label, value, onChange, options }: { label: string; value
                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                 ))}
             </select>
+        </div>
+    );
+}
+
+function MultiSelectField({ label, selected, onChange, options }: { label: string; selected: string[]; onChange: (v: string[]) => void; options: { value: string; label: string }[] }) {
+    const [isOpen, setIsOpen] = useState(false);
+    const available = options.filter(opt => opt.value && !selected.includes(opt.value));
+
+    const toggle = (value: string) => {
+        if (selected.includes(value)) {
+            onChange(selected.filter(v => v !== value));
+        } else {
+            onChange([...selected, value]);
+        }
+    };
+
+    const getLabel = (value: string) => options.find(o => o.value === value)?.label ?? value;
+
+    return (
+        <div className="relative">
+            <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-1.5 block">{label}</label>
+            {/* Selected tags */}
+            {selected.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                    {selected.map(val => (
+                        <span key={val} className="flex items-center gap-1 px-2.5 py-1 bg-primary-50 text-primary-700 rounded-lg text-[10px] font-bold border border-primary-100">
+                            {getLabel(val)}
+                            <button onClick={() => toggle(val)} className="hover:text-red-500 transition-colors">
+                                <X size={10} />
+                            </button>
+                        </span>
+                    ))}
+                </div>
+            )}
+            {/* Dropdown trigger */}
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="input-field w-full text-left flex items-center justify-between cursor-pointer"
+            >
+                <span className={selected.length > 0 ? 'text-secondary-400 text-xs' : 'text-secondary-400 text-xs'}>
+                    {selected.length > 0 ? `${selected.length} selected` : 'Select...'}
+                </span>
+                <ChevronDown size={14} className={`text-secondary-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {/* Dropdown list */}
+            {isOpen && (
+                <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
+                    <div className="absolute z-50 mt-1 w-full bg-white border border-secondary-200 rounded-xl shadow-xl max-h-52 overflow-y-auto">
+                        {available.length === 0 ? (
+                            <div className="px-3 py-2 text-xs text-secondary-400">All options selected</div>
+                        ) : (
+                            available.map(opt => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => { toggle(opt.value); }}
+                                    className="w-full text-left px-3 py-2 text-xs font-medium text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors"
+                                >
+                                    {opt.label}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                </>
+            )}
         </div>
     );
 }

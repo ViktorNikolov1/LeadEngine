@@ -15,22 +15,22 @@ const scrapeSchema = z.object({
     fileName: z.string().max(200).optional().default('Prospects'),
     jobTitles: z.array(z.string().max(200)).optional().default([]),
     excludeJobTitles: z.array(z.string().max(200)).optional().default([]),
-    seniorityLevel: z.string().max(100).nullable().optional(),
-    functionalLevel: z.string().max(100).nullable().optional(),
-    contactLocation: z.string().max(200).nullable().optional(),
+    seniorityLevel: z.array(z.string().max(100)).optional().default([]),
+    functionalLevel: z.array(z.string().max(100)).optional().default([]),
+    contactLocation: z.array(z.string().max(200)).optional().default([]),
     contactCities: z.array(z.string().max(200)).optional().default([]),
-    excludeLocation: z.string().max(200).nullable().optional(),
+    excludeLocation: z.array(z.string().max(200)).optional().default([]),
     excludeCities: z.array(z.string().max(200)).optional().default([]),
     emailStatus: z.array(z.string().max(50)).optional().default(['validated']),
     companyDomains: z.array(z.string().max(300)).optional().default([]),
-    companySize: z.string().max(100).nullable().optional(),
-    industry: z.string().max(200).nullable().optional(),
-    excludeIndustry: z.string().max(200).nullable().optional(),
+    companySize: z.array(z.string().max(100)).optional().default([]),
+    industry: z.array(z.string().max(200)).optional().default([]),
+    excludeIndustry: z.array(z.string().max(200)).optional().default([]),
     companyKeywords: z.array(z.string().max(200)).optional().default([]),
     excludeCompanyKeywords: z.array(z.string().max(200)).optional().default([]),
     minRevenue: z.string().max(50).nullable().optional(),
     maxRevenue: z.string().max(50).nullable().optional(),
-    funding: z.string().max(100).nullable().optional(),
+    funding: z.array(z.string().max(100)).optional().default([]),
 });
 
 export async function POST(request: NextRequest) {
@@ -52,27 +52,27 @@ export async function POST(request: NextRequest) {
             fileName,
             jobTitles,
             excludeJobTitles,
-            seniorityLevel = null,
-            functionalLevel = null,
-            contactLocation = null,
+            seniorityLevel,
+            functionalLevel,
+            contactLocation,
             contactCities,
-            excludeLocation = null,
+            excludeLocation,
             excludeCities,
             emailStatus,
             companyDomains,
-            companySize = null,
-            industry = null,
-            excludeIndustry = null,
+            companySize,
+            industry,
+            excludeIndustry,
             companyKeywords,
             excludeCompanyKeywords,
             minRevenue = null,
             maxRevenue = null,
-            funding = null,
+            funding,
         } = parsed.data;
 
-        const hasFilter = jobTitles.length > 0 || contactLocation || contactCities.length > 0
-            || industry || companyDomains.length > 0 || companyKeywords.length > 0
-            || seniorityLevel || functionalLevel;
+        const hasFilter = jobTitles.length > 0 || contactLocation.length > 0 || contactCities.length > 0
+            || industry.length > 0 || companyDomains.length > 0 || companyKeywords.length > 0
+            || seniorityLevel.length > 0 || functionalLevel.length > 0;
 
         if (!hasFilter) {
             return NextResponse.json(
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Build actor input
+        // Build actor input — convert empty arrays to null so they're stripped
         const toNullableArr = (arr: string[]) => arr.length > 0 ? arr : null;
         const toArr = (val: string | null) => val ? [val] : null;
 
@@ -104,22 +104,22 @@ export async function POST(request: NextRequest) {
             file_name: fileName,
             contact_job_title: toNullableArr(jobTitles),
             contact_not_job_title: toNullableArr(excludeJobTitles),
-            seniority_level: toArr(seniorityLevel),
-            functional_level: toArr(functionalLevel),
-            contact_location: toArr(contactLocation),
+            seniority_level: toNullableArr(seniorityLevel),
+            functional_level: toNullableArr(functionalLevel),
+            contact_location: toNullableArr(contactLocation),
             contact_city: toNullableArr(contactCities),
-            contact_not_location: toArr(excludeLocation),
+            contact_not_location: toNullableArr(excludeLocation),
             contact_not_city: toNullableArr(excludeCities),
             email_status: emailStatus,
             company_domain: toNullableArr(companyDomains),
-            size: toArr(companySize),
-            company_industry: toArr(industry),
-            company_not_industry: toArr(excludeIndustry),
+            size: toNullableArr(companySize),
+            company_industry: toNullableArr(industry),
+            company_not_industry: toNullableArr(excludeIndustry),
             company_keywords: toNullableArr(companyKeywords),
             company_not_keywords: toNullableArr(excludeCompanyKeywords),
             min_revenue: toArr(minRevenue),
             max_revenue: toArr(maxRevenue),
-            funding: toArr(funding),
+            funding: toNullableArr(funding),
         };
 
         const actorInput: Record<string, unknown> = {};
@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
 
         // Normalize and insert
         const leads = rawItems
-            .map((item) => normalizeLead(item, campaignId, industry))
+            .map((item) => normalizeLead(item, campaignId, industry[0] ?? null))
             .filter((lead): lead is NormalizedLead => lead !== null)
             .map(lead => ({ ...lead, user_id: user.id }));
 
