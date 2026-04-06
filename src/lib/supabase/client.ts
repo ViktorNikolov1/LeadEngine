@@ -1,17 +1,10 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { createBrowserClient } from '@supabase/ssr';
 
-let _supabase: SupabaseClient | null = null;
-
-export const supabase: SupabaseClient = new Proxy({} as SupabaseClient, {
-    get(_target, prop) {
-        if (!_supabase) {
-            const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-            const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-            if (!url || !key) {
-                throw new Error('Supabase env vars not set — add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
-            }
-            _supabase = createClient(url, key);
-        }
-        return Reflect.get(_supabase, prop);
-    },
-});
+export function createClient() {
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) {
+        throw new Error('Supabase env vars not set — add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+    }
+    return createBrowserClient(url, key);
+}

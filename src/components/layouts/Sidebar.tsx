@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Home, Users, Search, Database, Settings, LogOut, ChevronRight, Menu, X, Zap, Send, Clock, Sun, Moon } from 'lucide-react';
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { useTheme } from '@/components/ThemeProvider';
 
 export default function Sidebar() {
@@ -16,6 +16,7 @@ export default function Sidebar() {
 
     useEffect(() => {
         async function loadUser() {
+            const supabase = createClient();
             const { data: { user } } = await supabase.auth.getUser();
             if (user) {
                 const name = user.user_metadata?.full_name ?? user.email?.split('@')[0] ?? 'User';
@@ -27,6 +28,7 @@ export default function Sidebar() {
     }, []);
 
     const handleLogout = async () => {
+        const supabase = createClient();
         await supabase.auth.signOut();
         window.location.href = '/login';
     };

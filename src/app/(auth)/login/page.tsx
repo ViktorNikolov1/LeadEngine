@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
 import DotGrid from '@/components/ui/DotGrid';
 
@@ -19,12 +18,14 @@ export default function LoginPage() {
         setError('');
         setLoading(true);
 
+        const supabase = createClient();
         const { error } = await supabase.auth.signInWithPassword({ email, password });
 
         if (error) {
             setError(error.message);
             setLoading(false);
         } else {
+            router.refresh();
             router.push('/leads');
         }
     };

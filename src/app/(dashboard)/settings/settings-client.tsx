@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { Save, User, Bell, Mail, Shield, AlertCircle, Loader2, Check } from "lucide-react";
-import { supabase } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/client';
 
 export default function SettingsClient({ displayName, email, userId }: { displayName: string; email: string; userId: string }) {
     const [name, setName] = useState(displayName);
@@ -39,6 +39,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
         setResetSending(true);
         setError('');
         try {
+            const supabase = createClient();
             const { error } = await supabase.auth.resetPasswordForEmail(email);
             if (error) {
                 setError(error.message);
