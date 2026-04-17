@@ -36,8 +36,6 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState<string | null>(null);
     const [showFilterMenu, setShowFilterMenu] = useState(false);
-    const [filterCampaign, setFilterCampaign] = useState<string | null>(null);
-    const [showCampaignFilter, setShowCampaignFilter] = useState(false);
     const [exporting, setExporting] = useState(false);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -140,9 +138,7 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
         const matchesSearch = !searchQuery || [lead.full_name, lead.first_name, lead.last_name, lead.company_name, lead.job_title, lead.email]
             .some(f => f?.toLowerCase().includes(searchQuery.toLowerCase()));
         const matchesFilter = !filterStatus || lead.status === filterStatus;
-        const matchesCampaign = !filterCampaign
-            || (filterCampaign === '__unassigned__' ? !lead.campaign_id : lead.campaign_id === filterCampaign);
-        return matchesSearch && matchesFilter && matchesCampaign;
+        return matchesSearch && matchesFilter;
     });
 
     const filteredIds = filteredLeads.map(l => l.id);
@@ -285,51 +281,7 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                 </div>
                 <div className="relative shrink-0">
                     <button
-                        onClick={() => { setShowCampaignFilter(!showCampaignFilter); setShowFilterMenu(false); }}
-                        className={`flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group whitespace-nowrap ${filterCampaign ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
-                    >
-                        <Target size={18} className="text-secondary-400 group-hover:text-primary-500 group-hover:scale-110 transition-all shrink-0" />
-                        <span className="truncate max-w-[140px]">
-                            {filterCampaign
-                                ? filterCampaign === '__unassigned__'
-                                    ? 'Unassigned'
-                                    : campaigns.find(c => c.id === filterCampaign)?.name ?? 'Campaign'
-                                : 'Campaign'}
-                        </span>
-                        {filterCampaign && (
-                            <X size={14} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setFilterCampaign(null); setShowCampaignFilter(false); }} />
-                        )}
-                    </button>
-                    {showCampaignFilter && (
-                        <div className="absolute top-full mt-2 right-0 bg-white border border-secondary-200 rounded-2xl shadow-2xl z-50 py-2 min-w-[220px] max-h-[300px] overflow-y-auto">
-                            <button
-                                onClick={() => { setFilterCampaign('__unassigned__'); setShowCampaignFilter(false); }}
-                                className={`w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest hover:bg-secondary-50 transition-colors ${filterCampaign === '__unassigned__' ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
-                            >
-                                Unassigned
-                            </button>
-                            {campaigns.map(c => (
-                                <button
-                                    key={c.id}
-                                    onClick={() => { setFilterCampaign(c.id); setShowCampaignFilter(false); }}
-                                    className={`w-full px-4 py-2.5 text-left text-xs font-bold truncate hover:bg-secondary-50 transition-colors ${filterCampaign === c.id ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
-                                >
-                                    {c.name}
-                                </button>
-                            ))}
-                            <hr className="my-1 border-secondary-100" />
-                            <button
-                                onClick={() => { setFilterCampaign(null); setShowCampaignFilter(false); }}
-                                className="w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest text-secondary-400 hover:bg-secondary-50 transition-colors"
-                            >
-                                Clear filter
-                            </button>
-                        </div>
-                    )}
-                </div>
-                <div className="relative shrink-0">
-                    <button
-                        onClick={() => { setShowFilterMenu(!showFilterMenu); setShowCampaignFilter(false); }}
+                        onClick={() => { setShowFilterMenu(!showFilterMenu); }}
                         className={`flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group whitespace-nowrap ${filterStatus ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
                     >
                         <Filter size={18} className="text-secondary-400 group-hover:text-primary-500 group-hover:scale-110 transition-all" />
@@ -455,13 +407,14 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                         <table className="w-full text-left border-collapse table-fixed">
                             <colgroup>
                                 <col className="w-[40px]" />
-                                <col className="w-[25%]" />
+                                <col className="w-[22%]" />
+                                <col className="w-[9%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[12%]" />
+                                <col className="w-[10%]" />
                                 <col className="w-[10%]" />
                                 <col className="w-[13%]" />
-                                <col className="w-[14%]" />
-                                <col className="w-[12%]" />
-                                <col className="w-[12%]" />
-                                <col className="w-[14%]" />
                             </colgroup>
                             <thead className="bg-secondary-50/30 border-b border-secondary-200/50 text-secondary-400 text-[9px] uppercase tracking-[0.2em] font-black">
                                 <tr>
@@ -480,6 +433,7 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                     <th className="px-2 py-3">Industry</th>
                                     <th className="px-2 py-3">Company</th>
                                     <th className="px-2 py-3">Location</th>
+                                    <th className="px-2 py-3">Campaign</th>
                                     <th className="px-2 py-3">Touch</th>
                                     <th className="px-2 py-3 text-right pr-3">Actions</th>
                                 </tr>
@@ -543,6 +497,11 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                             </td>
                                             <td className="px-2 py-3 overflow-hidden">
                                                 <span className="text-xs text-secondary-500 truncate block">{lead.location ?? '—'}</span>
+                                            </td>
+                                            <td className="px-2 py-3 overflow-hidden">
+                                                <span className="text-xs font-bold text-slate-700 truncate block">
+                                                    {lead.campaign_id ? (campaigns.find(c => c.id === lead.campaign_id)?.name ?? '—') : '—'}
+                                                </span>
                                             </td>
                                             <td className="px-2 py-3">
                                                 <div className="flex items-center gap-1.5 text-[9px] font-black text-secondary-400 uppercase tracking-wider">
