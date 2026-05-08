@@ -26,9 +26,8 @@ export async function apifyFetch<T>(
 
     if (!response.ok) {
         const body = await response.text();
-        throw new Error(
-            `Apify API error ${response.status}: ${body}`,
-        );
+        console.error(`Apify API error ${response.status}:`, body);
+        throw new Error(`Apify API request failed with status ${response.status}`);
     }
 
     return response.json() as Promise<T>;

@@ -20,21 +20,37 @@ import {
     BarChart3,
     Sparkles,
     ShieldCheck,
+    Zap,
+    Users,
 } from 'lucide-react';
+
+type CampaignOption = {
+    id: string;
+    name: string;
+    status: string;
+};
 
 type OutreachClientProps = {
     initialEmails: EmailWithLead[];
     initialStats: EmailStats;
     leads: Pick<Lead, 'id' | 'full_name' | 'email' | 'company_name'>[];
-    resendConfigured: boolean;
-    geminiConfigured: boolean;
+    campaigns: CampaignOption[];
+    emailConfigured: boolean;
+    aiConfigured: boolean;
 };
 
-type ActiveTab = 'compose' | 'sent' | 'tracking';
+type ActiveTab = 'compose' | 'campaign' | 'sent' | 'tracking';
 
 type EmailStatus = 'draft' | 'approved' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'complained' | 'failed';
 
-export default function OutreachClient({ initialEmails, initialStats, leads, resendConfigured, geminiConfigured }: OutreachClientProps) {
+type BatchResult = {
+    lead_id: string;
+    lead_name: string;
+    status: 'success' | 'error';
+    error?: string;
+};
+
+export default function OutreachClient({ initialEmails, initialStats, leads, campaigns, emailConfigured, aiConfigured }: OutreachClientProps) {
     const [activeTab, setActiveTab] = useState<ActiveTab>('tracking');
     const [emails, setEmails] = useState<EmailWithLead[]>(initialEmails);
     const [stats, setStats] = useState<EmailStats>(initialStats);
@@ -57,6 +73,18 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
     const [isSending, setIsSending] = useState(false);
     const [composeDraftId, setComposeDraftId] = useState<string | null>(null);
     const [composeStatus, setComposeStatus] = useState<'new' | 'draft' | 'approved'>('new');
+
+    // Campaign batch state
+    const [selectedCampaignId, setSelectedCampaignId] = useState('');
+    const [campaignSenderName, setCampaignSenderName] = useState('');
+    const [campaignSenderCompany, setCampaignSenderCompany] = useState('');
+    const [campaignFromEmail, setCampaignFromEmail] = useState('');
+    const [campaignContext, setCampaignContext] = useState('');
+    const [isBatchGenerating, setIsBatchGenerating] = useState(false);
+    const [batchResults, setBatchResults] = useState<BatchResult[] | null>(null);
+    const [batchSummary, setBatchSummary] = useState<{ success: number; errors: number; message: string } | null>(null);
+    const [isBatchApproving, setIsBatchApproving] = useState(false);
+    const [isBatchSending, setIsBatchSending] = useState(false);
 
     // Detail modal
     const [viewingEmail, setViewingEmail] = useState<EmailWithLead | null>(null);
@@ -241,6 +269,77 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
         setComposeStatus('new');
     };
 
+    // Campaign batch handlers
+    const handleBatchGenerate = async () => {
+        if (!selectedCampaignId || !campaignSenderName || !campaignSenderCompany || !campaignFromEmail) return;
+        setIsBatchGenerating(true);
+        setBatchResults(null);
+        setBatchSummary(null);
+        try {
+            const res = await fetch('/api/emails/generate-campaign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    campaign_id: selectedCampaignId,
+                    sender_name: campaignSenderName,
+                    sender_company: campaignSenderCompany,
+                    from_email: campaignFromEmail,
+                    context: campaignContext || undefined,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setBatchResults(data.results);
+                setBatchSummary({ success: data.success, errors: data.errors, message: data.message });
+                await refreshEmails();
+            } else {
+                setBatchSummary({ success: 0, errors: 0, message: data.error ?? 'Failed to generate emails' });
+            }
+        } finally {
+            setIsBatchGenerating(false);
+        }
+    };
+
+    const handleBatchApproveAll = async () => {
+        // Approve all draft emails for the selected campaign
+        const draftEmails = emails.filter(e => e.status === 'draft' && e.campaign_id === selectedCampaignId);
+        if (draftEmails.length === 0) return;
+        setIsBatchApproving(true);
+        try {
+            await Promise.all(draftEmails.map(e =>
+                fetch(`/api/emails/${e.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'approved' }),
+                })
+            ));
+            await refreshEmails();
+        } finally {
+            setIsBatchApproving(false);
+        }
+    };
+
+    const handleBatchSendAll = async () => {
+        const approvedEmails = emails.filter(e => e.status === 'approved' && e.campaign_id === selectedCampaignId);
+        if (approvedEmails.length === 0) return;
+        setIsBatchSending(true);
+        try {
+            const res = await fetch('/api/emails/send-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email_ids: approvedEmails.map(e => e.id) }),
+            });
+            if (res.ok) {
+                await refreshEmails();
+            }
+        } finally {
+            setIsBatchSending(false);
+        }
+    };
+
+    const campaignDraftCount = selectedCampaignId ? emails.filter(e => e.status === 'draft' && e.campaign_id === selectedCampaignId).length : 0;
+    const campaignApprovedCount = selectedCampaignId ? emails.filter(e => e.status === 'approved' && e.campaign_id === selectedCampaignId).length : 0;
+
     return (
         <div className="max-w-7xl mx-auto space-y-10 animate-in fade-in duration-700">
             {/* Header */}
@@ -273,14 +372,14 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex bg-secondary-100 p-1.5 rounded-2xl max-w-md">
-                {(['tracking', 'sent', 'compose'] as ActiveTab[]).map(tab => (
+            <div className="flex bg-secondary-100 p-1.5 rounded-2xl max-w-lg">
+                {(['tracking', 'sent', 'compose', 'campaign'] as ActiveTab[]).map(tab => (
                     <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
                         className={`flex-1 text-[11px] font-black py-2.5 rounded-xl transition-all uppercase tracking-widest ${activeTab === tab ? 'bg-white shadow-lg text-slate-900' : 'text-secondary-400 hover:text-secondary-600'}`}
                     >
-                        {tab === 'sent' ? 'Sent Emails' : tab === 'compose' ? 'Compose' : 'Tracking'}
+                        {tab === 'sent' ? 'Sent' : tab === 'compose' ? 'Compose' : tab === 'campaign' ? 'Campaign' : 'Tracking'}
                     </button>
                 ))}
             </div>
@@ -435,7 +534,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
                                                         {email.status === 'approved' && (
                                                             <button
                                                                 onClick={() => handleSendFromList(email.id)}
-                                                                disabled={isSending || !resendConfigured}
+                                                                disabled={isSending || !emailConfigured}
                                                                 className="p-2.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-600 hover:text-white rounded-xl transition-all shadow-sm disabled:opacity-40"
                                                                 title="Send"
                                                             >
@@ -514,10 +613,10 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
                             </div>
 
                             {/* AI Generation Section */}
-                            {geminiConfigured && (
+                            {aiConfigured && (
                                 <div className="p-5 bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200/50 rounded-2xl space-y-4">
                                     <h4 className="text-[10px] font-black text-purple-600 uppercase tracking-widest flex items-center gap-2">
-                                        <Sparkles size={14} /> AI-Powered Generation
+                                        <Sparkles size={14} /> AI-Powered Generation (OpenRouter)
                                     </h4>
                                     <div className="grid grid-cols-2 gap-4">
                                         <input
@@ -585,13 +684,13 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
                             </div>
 
                             {/* Service status */}
-                            {!resendConfigured && (
+                            {!emailConfigured && (
                                 <div className="flex items-start gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
                                     <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
                                     <div>
                                         <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1">Email service not connected</p>
                                         <p className="text-xs text-amber-700 font-medium">
-                                            Set the RESEND_API_KEY environment variable to start sending emails. Drafts can still be saved and approved.
+                                            Set the SENDGRID_API_KEY environment variable to start sending emails. Drafts can still be saved and approved.
                                         </p>
                                     </div>
                                 </div>
@@ -622,7 +721,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
                                 {composeStatus === 'approved' && (
                                     <button
                                         onClick={handleSend}
-                                        disabled={isSending || !resendConfigured}
+                                        disabled={isSending || !emailConfigured}
                                         className="flex-1 py-4 bg-slate-900 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-xl shadow-slate-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
                                     >
                                         {isSending ? <Loader2 size={14} className="animate-spin" /> : null}
@@ -635,6 +734,176 @@ export default function OutreachClient({ initialEmails, initialStats, leads, res
                             {composeStatus !== 'new' && (
                                 <div className={`text-center text-[10px] font-black uppercase tracking-widest ${composeStatus === 'draft' ? 'text-secondary-400' : 'text-blue-600'}`}>
                                     Status: {composeStatus === 'draft' ? 'Saved as draft — review and approve to send' : 'Approved — ready to send'}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Campaign Batch Tab */}
+            {activeTab === 'campaign' && (
+                <div className="space-y-6 animate-in fade-in duration-300">
+                    <div className="card p-8 shadow-2xl max-w-3xl">
+                        <h3 className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+                            <Zap size={14} className="text-primary-500" /> Campaign Email Generation
+                        </h3>
+                        <p className="text-sm text-secondary-500 font-medium mb-8">
+                            Generate AI-powered personalized emails for all leads in a campaign. Emails are created as drafts for your review before sending.
+                        </p>
+
+                        <div className="space-y-6">
+                            {/* Campaign selector */}
+                            <div className="group">
+                                <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block group-focus-within:text-primary-600 transition-colors">
+                                    Campaign
+                                </label>
+                                <select
+                                    value={selectedCampaignId}
+                                    onChange={(e) => { setSelectedCampaignId(e.target.value); setBatchResults(null); setBatchSummary(null); }}
+                                    className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-3 px-4 text-sm text-slate-900 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold"
+                                >
+                                    <option value="">Select a campaign...</option>
+                                    {campaigns.map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.name} ({c.status})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Sender info */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="group">
+                                    <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Your Name</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Your name"
+                                        value={campaignSenderName}
+                                        onChange={(e) => setCampaignSenderName(e.target.value)}
+                                        className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-3 px-4 text-sm text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold"
+                                    />
+                                </div>
+                                <div className="group">
+                                    <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Your Company</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Your company"
+                                        value={campaignSenderCompany}
+                                        onChange={(e) => setCampaignSenderCompany(e.target.value)}
+                                        className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-3 px-4 text-sm text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="group">
+                                <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">From Email</label>
+                                <input
+                                    type="email"
+                                    placeholder="your@company.com"
+                                    value={campaignFromEmail}
+                                    onChange={(e) => setCampaignFromEmail(e.target.value)}
+                                    className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-3 px-4 text-sm text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold"
+                                />
+                            </div>
+
+                            <div className="group">
+                                <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Context (Optional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. 'Mention our new product launch' or 'Focus on cost savings'"
+                                    value={campaignContext}
+                                    onChange={(e) => setCampaignContext(e.target.value)}
+                                    className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-3 px-4 text-sm text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-bold"
+                                />
+                            </div>
+
+                            {!aiConfigured && (
+                                <div className="flex items-start gap-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl">
+                                    <AlertTriangle size={20} className="text-amber-500 shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="text-xs font-black text-amber-800 uppercase tracking-widest mb-1">AI service not connected</p>
+                                        <p className="text-xs text-amber-700 font-medium">
+                                            Set the OPENROUTER_API_KEY environment variable to generate AI-powered emails.
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Generate button */}
+                            <button
+                                onClick={handleBatchGenerate}
+                                disabled={!selectedCampaignId || !campaignSenderName || !campaignSenderCompany || !campaignFromEmail || !aiConfigured || isBatchGenerating}
+                                className="w-full py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg shadow-purple-600/20 hover:shadow-xl transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                                {isBatchGenerating ? (
+                                    <><Loader2 size={16} className="animate-spin" /> Generating Emails for All Leads...</>
+                                ) : (
+                                    <><Sparkles size={16} /> Generate Emails for Campaign</>
+                                )}
+                            </button>
+
+                            {/* Batch results */}
+                            {batchSummary && (
+                                <div className={`p-5 rounded-2xl border ${batchSummary.errors > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                                    <p className={`text-sm font-black ${batchSummary.errors > 0 ? 'text-amber-800' : 'text-emerald-800'}`}>
+                                        {batchSummary.message}
+                                    </p>
+                                    {batchResults && batchResults.length > 0 && (
+                                        <div className="mt-4 space-y-2 max-h-48 overflow-y-auto">
+                                            {batchResults.map((r, i) => (
+                                                <div key={i} className="flex items-center gap-2 text-xs">
+                                                    {r.status === 'success' ? (
+                                                        <CheckCircle2 size={14} className="text-emerald-500 shrink-0" />
+                                                    ) : (
+                                                        <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                                                    )}
+                                                    <span className="font-bold text-slate-700">{r.lead_name}</span>
+                                                    {r.error && <span className="text-red-600">— {r.error}</span>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Batch approve / send actions */}
+                            {selectedCampaignId && (campaignDraftCount > 0 || campaignApprovedCount > 0) && (
+                                <div className="p-5 bg-secondary-50/50 border border-secondary-200 rounded-2xl space-y-4">
+                                    <h4 className="text-[10px] font-black text-secondary-400 uppercase tracking-widest flex items-center gap-2">
+                                        <Users size={14} /> Campaign Email Actions
+                                    </h4>
+                                    <div className="flex gap-4">
+                                        {campaignDraftCount > 0 && (
+                                            <button
+                                                onClick={handleBatchApproveAll}
+                                                disabled={isBatchApproving}
+                                                className="flex-1 py-3 bg-blue-600 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-blue-700 transition-all disabled:opacity-40"
+                                            >
+                                                {isBatchApproving ? (
+                                                    <><Loader2 size={14} className="animate-spin" /> Approving...</>
+                                                ) : (
+                                                    <><ShieldCheck size={14} /> Approve All Drafts ({campaignDraftCount})</>
+                                                )}
+                                            </button>
+                                        )}
+                                        {campaignApprovedCount > 0 && (
+                                            <button
+                                                onClick={handleBatchSendAll}
+                                                disabled={isBatchSending || !emailConfigured}
+                                                className="flex-1 py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-lg hover:bg-slate-800 transition-all disabled:opacity-40"
+                                            >
+                                                {isBatchSending ? (
+                                                    <><Loader2 size={14} className="animate-spin" /> Sending...</>
+                                                ) : (
+                                                    <><Send size={14} /> Send All Approved ({campaignApprovedCount})</>
+                                                )}
+                                            </button>
+                                        )}
+                                    </div>
+                                    {!emailConfigured && campaignApprovedCount > 0 && (
+                                        <p className="text-[10px] text-amber-600 font-bold">Set SENDGRID_API_KEY to enable sending.</p>
+                                    )}
                                 </div>
                             )}
                         </div>

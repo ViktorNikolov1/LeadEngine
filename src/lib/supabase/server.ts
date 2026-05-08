@@ -1,4 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
+import { createServerClient as createSSRClient } from '@supabase/ssr';
+import { cookies } from 'next/headers';
 import type { EmailStatus } from '@/types';
 
 export function createServerClient() {
@@ -16,11 +18,45 @@ export function createServerClient() {
     return createClient(supabaseUrl, supabaseKey);
 }
 
-export async function fetchLeads() {
+/**
+ * Get the authenticated user from server components via cookies.
+ * Returns user_id or throws if not authenticated.
+ */
+export async function getServerUserId(): Promise<string> {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+    if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase env vars not configured');
+    }
+
+    const cookieStore = await cookies();
+    const supabase = createSSRClient(supabaseUrl, supabaseAnonKey, {
+        cookies: {
+            getAll() {
+                return cookieStore.getAll();
+            },
+            setAll() {
+                // Server components are read-only
+            },
+        },
+    });
+
+    const { data: { user }, error } = await supabase.auth.getUser();
+
+    if (error || !user) {
+        throw new Error('Not authenticated');
+    }
+
+    return user.id;
+}
+
+export async function fetchLeads(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('leads')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -30,11 +66,12 @@ export async function fetchLeads() {
     return data ?? [];
 }
 
-export async function fetchCampaigns() {
+export async function fetchCampaigns(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('campaigns')
         .select('*')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -44,11 +81,12 @@ export async function fetchCampaigns() {
     return data ?? [];
 }
 
-export async function fetchCampaignLeadCounts() {
+export async function fetchCampaignLeadCounts(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('leads')
-        .select('campaign_id, status, industry');
+        .select('campaign_id, status, industry')
+        .eq('user_id', userId);
 
     if (error) {
         console.error('Error fetching lead counts:', error);
@@ -69,11 +107,12 @@ export async function fetchCampaignLeadCounts() {
     return counts;
 }
 
-export async function fetchLeadStats() {
+export async function fetchLeadStats(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('leads')
-        .select('status');
+        .select('status')
+        .eq('user_id', userId);
 
     if (error) {
         console.error('Error fetching lead stats:', error);
@@ -96,11 +135,12 @@ export async function fetchLeadStats() {
     return stats;
 }
 
-export async function fetchRuns() {
+export async function fetchRuns(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('runs')
         .select('*, campaign:campaigns(id, name)')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     if (error) {
@@ -110,14 +150,15 @@ export async function fetchRuns() {
     return data ?? [];
 }
 
-export async function fetchRunStats() {
+export async function fetchRunStats(userId: string) {
     const supabase = createServerClient();
     const now = new Date();
     const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
     const { data, error } = await supabase
         .from('runs')
-        .select('status, created_at');
+        .select('status, created_at')
+        .eq('user_id', userId);
 
     if (error) {
         console.error('Error fetching run stats:', error);
@@ -134,12 +175,13 @@ export async function fetchRunStats() {
     return { total24h: last24h.length, successRate, active, failed };
 }
 
-export async function fetchLeadById(id: string) {
+export async function fetchLeadById(id: string, userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('leads')
         .select('*')
         .eq('id', id)
+        .eq('user_id', userId)
         .single();
 
     if (error) {
@@ -149,11 +191,12 @@ export async function fetchLeadById(id: string) {
     return data;
 }
 
-export async function fetchEmails(filters?: { status?: string; search?: string }) {
+export async function fetchEmails(userId: string, filters?: { status?: string; search?: string }) {
     const supabase = createServerClient();
     let query = supabase
         .from('emails')
         .select('*, lead:leads(id, full_name, email, company_name, job_title)')
+        .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
     if (filters?.status) {
@@ -173,12 +216,13 @@ export async function fetchEmails(filters?: { status?: string; search?: string }
     return data ?? [];
 }
 
-export async function fetchEmailById(id: string) {
+export async function fetchEmailById(id: string, userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('emails')
         .select('*, lead:leads(id, full_name, email, company_name, job_title)')
         .eq('id', id)
+        .eq('user_id', userId)
         .single();
 
     if (error) {
@@ -188,11 +232,12 @@ export async function fetchEmailById(id: string) {
     return data;
 }
 
-export async function fetchEmailStats() {
+export async function fetchEmailStats(userId: string) {
     const supabase = createServerClient();
     const { data, error } = await supabase
         .from('emails')
-        .select('status, opened_at, clicked_at');
+        .select('status, opened_at, clicked_at')
+        .eq('user_id', userId);
 
     if (error) {
         console.error('Error fetching email stats:', error);

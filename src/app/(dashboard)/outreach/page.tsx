@@ -1,15 +1,17 @@
 export const dynamic = 'force-dynamic';
 
-import { fetchEmails, fetchEmailStats, fetchLeads } from '@/lib/supabase/server';
-import { isResendConfigured } from '@/lib/email/resend';
-import { isGeminiConfigured } from '@/lib/ai/gemini';
+import { getServerUserId, fetchEmails, fetchEmailStats, fetchLeads, fetchCampaigns } from '@/lib/supabase/server';
+import { isEmailConfigured } from '@/lib/email/sendgrid';
+import { isOpenRouterConfigured } from '@/lib/ai/openrouter';
 import OutreachClient from './outreach-client';
 
 export default async function OutreachPage() {
-    const [emails, stats, allLeads] = await Promise.all([
-        fetchEmails(),
-        fetchEmailStats(),
-        fetchLeads(),
+    const userId = await getServerUserId();
+    const [emails, stats, allLeads, campaigns] = await Promise.all([
+        fetchEmails(userId),
+        fetchEmailStats(userId),
+        fetchLeads(userId),
+        fetchCampaigns(userId),
     ]);
 
     // Only pass minimal lead data needed for the selector
@@ -20,13 +22,20 @@ export default async function OutreachPage() {
         company_name: l.company_name,
     }));
 
+    const campaignOptions = campaigns.map(c => ({
+        id: c.id,
+        name: c.name,
+        status: c.status,
+    }));
+
     return (
         <OutreachClient
             initialEmails={emails}
             initialStats={stats}
             leads={leads}
-            resendConfigured={isResendConfigured()}
-            geminiConfigured={isGeminiConfigured()}
+            campaigns={campaignOptions}
+            emailConfigured={isEmailConfigured()}
+            aiConfigured={isOpenRouterConfigured()}
         />
     );
 }

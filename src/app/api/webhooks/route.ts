@@ -1,84 +1,111 @@
 import { NextRequest, NextResponse } from 'next/server';
+import crypto from 'crypto';
 import { createServerClient, insertEmailEvent } from '@/lib/supabase/server';
 
-type ResendWebhookEvent = {
-    type: string;
-    data: {
-        email_id?: string;
-        to?: string[];
-        from?: string;
-        subject?: string;
-        created_at?: string;
-        [key: string]: unknown;
-    };
+type SendGridEvent = {
+    event: string;
+    sg_message_id?: string;
+    email?: string;
+    timestamp?: number;
+    [key: string]: unknown;
 };
 
 const EVENT_MAP: Record<string, { eventType: string; timestampField?: string; statusUpdate?: string }> = {
-    'email.sent': { eventType: 'send' },
-    'email.delivered': { eventType: 'delivery', timestampField: 'delivered_at', statusUpdate: 'delivered' },
-    'email.opened': { eventType: 'open', timestampField: 'opened_at' },
-    'email.clicked': { eventType: 'click', timestampField: 'clicked_at' },
-    'email.bounced': { eventType: 'bounce', statusUpdate: 'bounced' },
-    'email.complained': { eventType: 'complaint', statusUpdate: 'complained' },
+    'processed': { eventType: 'send' },
+    'delivered': { eventType: 'delivery', timestampField: 'delivered_at', statusUpdate: 'delivered' },
+    'open': { eventType: 'open', timestampField: 'opened_at' },
+    'click': { eventType: 'click', timestampField: 'clicked_at' },
+    'bounce': { eventType: 'bounce', statusUpdate: 'bounced' },
+    'dropped': { eventType: 'bounce', statusUpdate: 'failed' },
+    'spamreport': { eventType: 'complaint', statusUpdate: 'complained' },
 };
+
+function verifyWebhookSignature(publicKey: string, payload: string, signature: string, timestamp: string): boolean {
+    try {
+        const timestampPayload = timestamp + payload;
+        const decodedKey = crypto.createPublicKey({
+            key: `-----BEGIN PUBLIC KEY-----\n${publicKey}\n-----END PUBLIC KEY-----`,
+            format: 'pem',
+        });
+        return crypto.verify(
+            'sha256',
+            Buffer.from(timestampPayload),
+            decodedKey,
+            Buffer.from(signature, 'base64'),
+        );
+    } catch {
+        return false;
+    }
+}
 
 export async function POST(request: NextRequest) {
     try {
-        const webhookSecret = process.env.RESEND_WEBHOOK_SECRET;
-        if (webhookSecret) {
-            const svixId = request.headers.get('svix-id');
-            const svixTimestamp = request.headers.get('svix-timestamp');
-            const svixSignature = request.headers.get('svix-signature');
-
-            if (!svixId || !svixTimestamp || !svixSignature) {
-                return NextResponse.json({ error: 'Missing webhook signature headers' }, { status: 401 });
-            }
-            // TODO: Full signature verification with svix package if needed
+        const webhookVerificationKey = process.env.SENDGRID_WEBHOOK_VERIFICATION_KEY;
+        if (!webhookVerificationKey) {
+            console.error('SENDGRID_WEBHOOK_VERIFICATION_KEY is not configured — rejecting webhook');
+            return NextResponse.json({ error: 'Webhook not configured' }, { status: 500 });
         }
 
-        const event = (await request.json()) as ResendWebhookEvent;
-        const mapping = EVENT_MAP[event.type];
+        const signature = request.headers.get('x-twilio-email-event-webhook-signature');
+        const timestamp = request.headers.get('x-twilio-email-event-webhook-timestamp');
 
-        if (!mapping) {
-            return NextResponse.json({ received: true, ignored: true });
+        if (!signature || !timestamp) {
+            return NextResponse.json({ error: 'Missing webhook signature headers' }, { status: 401 });
         }
 
-        const providerMessageId = event.data.email_id;
-        if (!providerMessageId) {
-            return NextResponse.json({ error: 'Missing email_id in event data' }, { status: 400 });
+        const body = await request.text();
+
+        if (!verifyWebhookSignature(webhookVerificationKey, body, signature, timestamp)) {
+            return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 401 });
         }
 
-        // Find our email record by provider_message_id
+        const events: SendGridEvent[] = JSON.parse(body);
+
+        if (!Array.isArray(events)) {
+            return NextResponse.json({ error: 'Invalid event payload' }, { status: 400 });
+        }
+
         const supabase = createServerClient();
-        const { data: email } = await supabase
-            .from('emails')
-            .select('id')
-            .eq('provider_message_id', providerMessageId)
-            .single();
+        let processed = 0;
 
-        if (!email) {
-            return NextResponse.json({ received: true, matched: false });
+        for (const evt of events) {
+            const mapping = EVENT_MAP[evt.event];
+            if (!mapping) continue;
+
+            // SendGrid message IDs have a format like "abc123.filter0001.12345.abc-1"
+            // The provider_message_id stored is the base part before the first "."
+            const rawId = evt.sg_message_id;
+            if (!rawId) continue;
+            const baseMessageId = rawId.split('.')[0];
+
+            const { data: email } = await supabase
+                .from('emails')
+                .select('id')
+                .eq('provider_message_id', baseMessageId)
+                .single();
+
+            if (!email) continue;
+
+            await insertEmailEvent(email.id, mapping.eventType, evt as Record<string, unknown>);
+
+            const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+
+            if (mapping.statusUpdate) {
+                updates.status = mapping.statusUpdate;
+            }
+            if (mapping.timestampField) {
+                updates[mapping.timestampField] = new Date().toISOString();
+            }
+
+            await supabase
+                .from('emails')
+                .update(updates)
+                .eq('id', email.id);
+
+            processed++;
         }
 
-        // Insert event
-        await insertEmailEvent(email.id, mapping.eventType, event.data as Record<string, unknown>);
-
-        // Update email record
-        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
-
-        if (mapping.statusUpdate) {
-            updates.status = mapping.statusUpdate;
-        }
-        if (mapping.timestampField) {
-            updates[mapping.timestampField] = new Date().toISOString();
-        }
-
-        await supabase
-            .from('emails')
-            .update(updates)
-            .eq('id', email.id);
-
-        return NextResponse.json({ received: true, processed: true });
+        return NextResponse.json({ received: true, processed });
     } catch (err) {
         console.error('Webhook error:', err);
         return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
