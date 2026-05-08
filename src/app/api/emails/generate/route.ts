@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v4';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
-import { generateOutreachEmail, isGeminiConfigured } from '@/lib/ai/gemini';
+import { generateOutreachEmail, isOpenRouterConfigured } from '@/lib/ai/openrouter';
 
 const generateSchema = z.object({
     lead_id: z.uuid(),
     sender_name: z.string().min(1),
     sender_company: z.string().min(1),
     context: z.string().optional(),
+    model: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -16,8 +17,8 @@ export async function POST(request: NextRequest) {
     const { supabase, user } = auth;
 
     try {
-        if (!isGeminiConfigured()) {
-            return NextResponse.json({ error: 'AI service not configured. Set GEMINI_API_KEY in environment.' }, { status: 503 });
+        if (!isOpenRouterConfigured()) {
+            return NextResponse.json({ error: 'AI service not configured. Set OPENROUTER_API_KEY in environment.' }, { status: 503 });
         }
 
         const body = await request.json();
@@ -53,6 +54,7 @@ export async function POST(request: NextRequest) {
             senderName: parsed.data.sender_name,
             senderCompany: parsed.data.sender_company,
             context: parsed.data.context,
+            model: parsed.data.model,
         });
 
         return NextResponse.json({ generated: result });

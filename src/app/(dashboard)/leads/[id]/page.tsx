@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { fetchLeadById, fetchEmails } from '@/lib/supabase/server';
+import { getServerUserId, fetchLeadById, fetchEmails } from '@/lib/supabase/server';
 import LeadProfile from './lead-profile';
 
 type Props = {
@@ -8,9 +8,10 @@ type Props = {
 
 export default async function LeadDetailPage({ params }: Props) {
     const { id } = await params;
+    const userId = await getServerUserId();
     const [lead, emails] = await Promise.all([
-        fetchLeadById(id),
-        fetchEmails(),
+        fetchLeadById(id, userId),
+        fetchEmails(userId),
     ]);
 
     if (!lead) notFound();

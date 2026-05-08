@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
+import * as XLSX from 'xlsx';
 
 type ParsedLead = {
     linkedin_url: string;
@@ -18,8 +19,10 @@ type ParsedLead = {
     user_id: string;
 };
 
-// Map common CSV header variations to our schema fields
-const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id' | 'user_id'>> = {
+type LeadField = keyof Omit<ParsedLead, 'source' | 'campaign_id' | 'user_id'>;
+
+// Map common CSV/Excel header variations to our schema fields (multilingual)
+const COLUMN_MAP: Record<string, LeadField> = {
     // LinkedIn URL
     'linkedin_url': 'linkedin_url',
     'linkedin url': 'linkedin_url',
@@ -30,6 +33,9 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'profileurl': 'linkedin_url',
     'person linkedin url': 'linkedin_url',
     'url': 'linkedin_url',
+    'perfil linkedin': 'linkedin_url',
+    'linkedin-profil': 'linkedin_url',
+    'profil linkedin': 'linkedin_url',
 
     // Email
     'email': 'email',
@@ -37,6 +43,11 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'e-mail': 'email',
     'contact email': 'email',
     'work email': 'email',
+    'correo': 'email',
+    'correo electrónico': 'email',
+    'correo electronico': 'email',
+    'e-mail-adresse': 'email',
+    'courriel': 'email',
 
     // First name
     'first_name': 'first_name',
@@ -44,6 +55,10 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'firstname': 'first_name',
     'given name': 'first_name',
     'nombre': 'first_name',
+    'vorname': 'first_name',
+    'prénom': 'first_name',
+    'prenom': 'first_name',
+    'nome': 'first_name',
 
     // Last name
     'last_name': 'last_name',
@@ -52,6 +67,11 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'surname': 'last_name',
     'family name': 'last_name',
     'apellido': 'last_name',
+    'apellidos': 'last_name',
+    'nachname': 'last_name',
+    'nom': 'last_name',
+    'nom de famille': 'last_name',
+    'sobrenome': 'last_name',
 
     // Full name
     'full_name': 'full_name',
@@ -60,11 +80,18 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'name': 'full_name',
     'contact name': 'full_name',
     'nombre completo': 'full_name',
+    'vollständiger name': 'full_name',
+    'vollstandiger name': 'full_name',
+    'nom complet': 'full_name',
 
     // Headline
     'headline': 'headline',
     'title': 'headline',
     'bio': 'headline',
+    'titular': 'headline',
+    'überschrift': 'headline',
+    'uberschrift': 'headline',
+    'titre': 'headline',
 
     // Location
     'location': 'location',
@@ -74,6 +101,17 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'address': 'location',
     'ubicacion': 'location',
     'ubicación': 'location',
+    'localizacion': 'location',
+    'localización': 'location',
+    'standort': 'location',
+    'lieu': 'location',
+    'ort': 'location',
+    'ciudad': 'location',
+    'país': 'location',
+    'pais': 'location',
+    'localidade': 'location',
+    'localité': 'location',
+    'localite': 'location',
 
     // Company
     'company_name': 'company_name',
@@ -82,6 +120,20 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'organization': 'company_name',
     'organisation': 'company_name',
     'empresa': 'company_name',
+    'nombre empresa': 'company_name',
+    'nombre de empresa': 'company_name',
+    'nombre de la empresa': 'company_name',
+    'razon social': 'company_name',
+    'razón social': 'company_name',
+    'firma': 'company_name',
+    'firmenname': 'company_name',
+    'unternehmen': 'company_name',
+    'unternehmensname': 'company_name',
+    'société': 'company_name',
+    'societe': 'company_name',
+    'nom de l\'entreprise': 'company_name',
+    'companhia': 'company_name',
+    'nome da empresa': 'company_name',
 
     // Company domain
     'company_domain': 'company_domain',
@@ -89,6 +141,10 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'domain': 'company_domain',
     'website': 'company_domain',
     'company website': 'company_domain',
+    'dominio': 'company_domain',
+    'domaine': 'company_domain',
+    'webseite': 'company_domain',
+    'sitio web': 'company_domain',
 
     // Job title
     'job_title': 'job_title',
@@ -98,13 +154,33 @@ const COLUMN_MAP: Record<string, keyof Omit<ParsedLead, 'source' | 'campaign_id'
     'role': 'job_title',
     'cargo': 'job_title',
     'puesto': 'job_title',
+    'berufsbezeichnung': 'job_title',
+    'titre du poste': 'job_title',
+    'stelle': 'job_title',
+    'posición': 'job_title',
+    'posicion': 'job_title',
 
     // Industry
     'industry': 'industry',
     'sector': 'industry',
     'company industry': 'industry',
     'industria': 'industry',
+    'branche': 'industry',
+    'secteur': 'industry',
+    'sektor': 'industry',
 };
+
+// ---- Helpers ----
+
+function normalizeHeader(header: string): string {
+    return header
+        .toLowerCase()
+        .trim()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, ''); // strip accents: é→e, ñ→n, ü→u
+}
+
+// ---- CSV parsing ----
 
 function parseCSVLine(line: string): string[] {
     const result: string[] = [];
@@ -151,20 +227,50 @@ function parseCSV(text: string): Record<string, string>[] {
     return rows;
 }
 
+// ---- XLSX parsing ----
+
+function parseXLSX(buffer: ArrayBuffer): Record<string, string>[] {
+    const workbook = XLSX.read(buffer, { type: 'array' });
+    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+    if (!firstSheet) return [];
+
+    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
+
+    return raw.map(row => {
+        const stringRow: Record<string, string> = {};
+        for (const [key, value] of Object.entries(row)) {
+            stringRow[key] = value != null ? String(value) : '';
+        }
+        return stringRow;
+    });
+}
+
+// ---- Row mapping ----
+
 function mapRow(
     row: Record<string, string>,
+    columnMapping: Record<string, LeadField | 'unmapped'>,
     campaignId: string | null,
     defaultIndustry: string | null,
     userId: string,
 ): ParsedLead | null {
     const mapped: Partial<ParsedLead> = {};
 
-    for (const [csvHeader, value] of Object.entries(row)) {
+    for (const [header, value] of Object.entries(row)) {
         if (!value) continue;
-        const normalized = csvHeader.toLowerCase().trim();
-        const field = COLUMN_MAP[normalized];
-        if (field) {
+
+        // First try the provided AI/static mapping
+        const field = columnMapping[header];
+        if (field && field !== 'unmapped') {
             (mapped as Record<string, string>)[field] = value;
+            continue;
+        }
+
+        // Fallback: static COLUMN_MAP lookup (with accent stripping)
+        const normalized = normalizeHeader(header);
+        const staticField = COLUMN_MAP[normalized];
+        if (staticField) {
+            (mapped as Record<string, string>)[staticField] = value;
         }
     }
 
@@ -209,6 +315,7 @@ export async function POST(request: NextRequest) {
         const file = formData.get('file') as File | null;
         const campaignId = formData.get('campaignId') as string | null;
         const defaultIndustry = formData.get('industry') as string | null;
+        const columnMappingRaw = formData.get('columnMapping') as string | null;
 
         if (!file) {
             return NextResponse.json({ error: 'No file provided' }, { status: 400 });
@@ -216,9 +323,12 @@ export async function POST(request: NextRequest) {
 
         // Validate file type
         const name = file.name.toLowerCase();
-        if (!name.endsWith('.csv') && !name.endsWith('.tsv') && !name.endsWith('.txt')) {
+        const isExcel = name.endsWith('.xlsx') || name.endsWith('.xls');
+        const isCSV = name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt');
+
+        if (!isExcel && !isCSV) {
             return NextResponse.json(
-                { error: 'Unsupported file format. Please upload a CSV file.' },
+                { error: 'Unsupported file format. Please upload a CSV or Excel (.xlsx) file.' },
                 { status: 400 },
             );
         }
@@ -231,19 +341,57 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        const text = await file.text();
-        const rows = parseCSV(text);
+        // Parse file
+        let rows: Record<string, string>[];
+        if (isExcel) {
+            const buffer = await file.arrayBuffer();
+            rows = parseXLSX(buffer);
+        } else {
+            const text = await file.text();
+            rows = parseCSV(text);
+        }
 
         if (rows.length === 0) {
             return NextResponse.json(
-                { error: 'No valid rows found in the file. Make sure it has a header row.' },
+                { error: 'No valid rows found in the file. Make sure it has a header row and data.' },
                 { status: 400 },
             );
         }
 
+        // Parse optional column mapping from client (AI-detected or user-corrected)
+        let columnMapping: Record<string, LeadField | 'unmapped'> = {};
+        if (columnMappingRaw) {
+            try {
+                columnMapping = JSON.parse(columnMappingRaw);
+            } catch {
+                // Ignore bad JSON, fall back to static mapping
+            }
+        }
+
+        // Extract headers for detection feedback
+        const fileHeaders = Object.keys(rows[0]);
+
+        // Detect which columns were mapped
+        const detectedColumns: string[] = [];
+        const unmappedColumns: string[] = [];
+
+        for (const header of fileHeaders) {
+            const fromAI = columnMapping[header];
+            if (fromAI && fromAI !== 'unmapped') {
+                detectedColumns.push(header);
+                continue;
+            }
+            const normalized = normalizeHeader(header);
+            if (COLUMN_MAP[normalized]) {
+                detectedColumns.push(header);
+            } else {
+                unmappedColumns.push(header);
+            }
+        }
+
         // Map and filter
         const leads = rows
-            .map(row => mapRow(row, campaignId || null, defaultIndustry, user.id))
+            .map(row => mapRow(row, columnMapping, campaignId || null, defaultIndustry, user.id))
             .filter((lead): lead is ParsedLead => lead !== null);
 
         if (leads.length === 0) {
@@ -277,27 +425,18 @@ export async function POST(request: NextRequest) {
             totalSaved += data?.length ?? 0;
         }
 
-        // Detect which columns were mapped for feedback
-        const sampleRow = rows[0];
-        const detectedColumns: string[] = [];
-        for (const header of Object.keys(sampleRow)) {
-            const normalized = header.toLowerCase().trim();
-            if (COLUMN_MAP[normalized]) {
-                detectedColumns.push(header);
-            }
-        }
-
         return NextResponse.json({
             message: `Successfully imported ${totalSaved} leads`,
             total_rows: rows.length,
             valid_leads: leads.length,
             saved: totalSaved,
             detected_columns: detectedColumns,
+            unmapped_columns: unmappedColumns,
+            headers: fileHeaders,
             skipped: rows.length - leads.length,
         });
     } catch (err) {
         console.error('Import error:', err);
-        const message = err instanceof Error ? err.message : 'Internal server error';
-        return NextResponse.json({ error: message }, { status: 500 });
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
 }

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
-import { sendEmail, isResendConfigured } from '@/lib/email/resend';
+import { sendEmail, isEmailConfigured } from '@/lib/email/sendgrid';
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await getAuthenticatedClient(request);
@@ -10,8 +10,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     try {
         const { id } = await params;
 
-        if (!isResendConfigured()) {
-            return NextResponse.json({ error: 'Email service not configured. Set RESEND_API_KEY in environment.' }, { status: 503 });
+        if (!isEmailConfigured()) {
+            return NextResponse.json({ error: 'Email service not configured. Set SENDGRID_API_KEY in environment.' }, { status: 503 });
         }
 
         // Fetch email ensuring it belongs to the user
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
             );
         }
 
-        // Send via Resend
+        // Send via SendGrid
         const result = await sendEmail({
             to: email.to_email,
             from: email.from_email,

@@ -34,6 +34,9 @@ import {
     CheckCircle,
     AlertCircle,
     FileSpreadsheet,
+    CheckSquare,
+    Square,
+    MinusSquare,
 } from 'lucide-react';
 import type { Lead } from '@/types';
 
@@ -214,11 +217,20 @@ export default function SearchPage() {
     const [dbLocation, setDbLocation] = useState('');
     const [dbIndustry, setDbIndustry] = useState('');
 
-    // CSV Import
+    // File Import
     const [importFile, setImportFile] = useState<File | null>(null);
     const [importing, setImporting] = useState(false);
     const [importResult, setImportResult] = useState<{ success: boolean; message: string; details?: string } | null>(null);
     const [dragOver, setDragOver] = useState(false);
+    const [detectingColumns, setDetectingColumns] = useState(false);
+    const [columnMapping, setColumnMapping] = useState<Record<string, string> | null>(null);
+    const [previewHeaders, setPreviewHeaders] = useState<string[]>([]);
+    const [previewRows, setPreviewRows] = useState<Record<string, string>[]>([]);
+    const [previewTotalRows, setPreviewTotalRows] = useState(0);
+
+    // Select all for results
+    const [selectedResultIds, setSelectedResultIds] = useState<Set<string>>(new Set());
+    const [savingSelected, setSavingSelected] = useState(false);
 
     // Apify filters — full actor schema
     const [fetchCount, setFetchCount] = useState(100);
@@ -258,6 +270,166 @@ export default function SearchPage() {
         URL.revokeObjectURL(url);
     };
 
+    // Client-side static column map for instant detection (keys must be accent-stripped lowercase)
+    const STATIC_COLUMN_MAP: Record<string, string> = {
+        'linkedin_url': 'linkedin_url', 'linkedin url': 'linkedin_url', 'linkedin': 'linkedin_url',
+        'linkedin profile': 'linkedin_url', 'linkedin link': 'linkedin_url', 'profile url': 'linkedin_url',
+        'person linkedin url': 'linkedin_url', 'url': 'linkedin_url', 'perfil linkedin': 'linkedin_url',
+        'linkedin-profil': 'linkedin_url', 'profil linkedin': 'linkedin_url',
+        'email': 'email', 'email address': 'email', 'e-mail': 'email', 'contact email': 'email',
+        'work email': 'email', 'correo': 'email', 'correo electronico': 'email',
+        'e-mail-adresse': 'email', 'courriel': 'email',
+        'first_name': 'first_name', 'first name': 'first_name', 'firstname': 'first_name',
+        'given name': 'first_name', 'nombre': 'first_name', 'vorname': 'first_name', 'prenom': 'first_name',
+        'last_name': 'last_name', 'last name': 'last_name', 'lastname': 'last_name',
+        'surname': 'last_name', 'family name': 'last_name', 'apellido': 'last_name', 'apellidos': 'last_name',
+        'nachname': 'last_name', 'nom de famille': 'last_name', 'nom': 'last_name',
+        'full_name': 'full_name', 'full name': 'full_name', 'fullname': 'full_name',
+        'name': 'full_name', 'contact name': 'full_name', 'nombre completo': 'full_name',
+        'headline': 'headline', 'title': 'headline', 'bio': 'headline', 'titular': 'headline',
+        'location': 'location', 'city': 'location', 'region': 'location', 'country': 'location',
+        'address': 'location', 'ubicacion': 'location', 'localizacion': 'location',
+        'standort': 'location', 'lieu': 'location', 'ort': 'location', 'ciudad': 'location',
+        'pais': 'location', 'localidade': 'location', 'localite': 'location',
+        'company_name': 'company_name', 'company name': 'company_name', 'company': 'company_name',
+        'organization': 'company_name', 'organisation': 'company_name', 'empresa': 'company_name',
+        'nombre empresa': 'company_name', 'nombre de empresa': 'company_name', 'nombre de la empresa': 'company_name',
+        'razon social': 'company_name', 'firma': 'company_name', 'firmenname': 'company_name',
+        'unternehmen': 'company_name', 'unternehmensname': 'company_name',
+        'societe': 'company_name', 'nom de l\'entreprise': 'company_name', 'nome da empresa': 'company_name',
+        'company_domain': 'company_domain', 'company domain': 'company_domain', 'domain': 'company_domain',
+        'website': 'company_domain', 'company website': 'company_domain', 'dominio': 'company_domain',
+        'webseite': 'company_domain', 'sitio web': 'company_domain',
+        'job_title': 'job_title', 'job title': 'job_title', 'jobtitle': 'job_title',
+        'position': 'job_title', 'role': 'job_title', 'cargo': 'job_title', 'puesto': 'job_title',
+        'berufsbezeichnung': 'job_title', 'titre du poste': 'job_title', 'posicion': 'job_title',
+        'industry': 'industry', 'sector': 'industry', 'company industry': 'industry',
+        'industria': 'industry', 'branche': 'industry', 'secteur': 'industry',
+    };
+
+    const normalizeHeader = (header: string): string => {
+        return header.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    };
+
+    const detectColumnsStatic = (headers: string[]): Record<string, string> => {
+        const mapping: Record<string, string> = {};
+        for (const header of headers) {
+            const normalized = normalizeHeader(header);
+            mapping[header] = STATIC_COLUMN_MAP[normalized] ?? 'unmapped';
+        }
+        return mapping;
+    };
+
+    const handleFileSelected = async (file: File) => {
+        const name = file.name.toLowerCase();
+        const valid = name.endsWith('.csv') || name.endsWith('.tsv') || name.endsWith('.txt') || name.endsWith('.xlsx') || name.endsWith('.xls');
+        if (!valid) return;
+
+        setImportFile(file);
+        setImportResult(null);
+        setColumnMapping(null);
+        setPreviewHeaders([]);
+        setPreviewRows([]);
+        setPreviewTotalRows(0);
+
+        try {
+            let headers: string[] = [];
+            let allRows: Record<string, string>[] = [];
+
+            if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
+                const XLSX = await import('xlsx');
+                const buffer = await file.arrayBuffer();
+                const wb = XLSX.read(buffer, { type: 'array' });
+                const ws = wb.Sheets[wb.SheetNames[0]];
+                if (ws) {
+                    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+                    allRows = raw.map(row => {
+                        const stringRow: Record<string, string> = {};
+                        for (const [key, value] of Object.entries(row)) {
+                            stringRow[key] = value != null ? String(value) : '';
+                        }
+                        return stringRow;
+                    });
+                    if (allRows.length > 0) headers = Object.keys(allRows[0]);
+                }
+            } else {
+                const text = await file.text();
+                const lines = text.split(/\r?\n/).filter(l => l.trim());
+                if (lines.length >= 1) {
+                    const parseLine = (line: string) => {
+                        const result: string[] = [];
+                        let current = '';
+                        let inQuotes = false;
+                        for (let i = 0; i < line.length; i++) {
+                            const char = line[i];
+                            if (char === '"') {
+                                if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
+                                else inQuotes = !inQuotes;
+                            } else if ((char === ',' || char === ';') && !inQuotes) {
+                                result.push(current.trim());
+                                current = '';
+                            } else {
+                                current += char;
+                            }
+                        }
+                        result.push(current.trim());
+                        return result;
+                    };
+                    headers = parseLine(lines[0]);
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = parseLine(lines[i]);
+                        if (values.length === 0 || (values.length === 1 && !values[0])) continue;
+                        const row: Record<string, string> = {};
+                        for (let j = 0; j < headers.length; j++) {
+                            row[headers[j]] = values[j] ?? '';
+                        }
+                        allRows.push(row);
+                    }
+                }
+            }
+
+            if (headers.length > 0) {
+                setPreviewHeaders(headers);
+                setPreviewRows(allRows.slice(0, 5));
+                setPreviewTotalRows(allRows.length);
+
+                // Instant static detection
+                const staticMapping = detectColumnsStatic(headers);
+                setColumnMapping(staticMapping);
+
+                // Check if any headers are unmapped — try AI detection
+                const unmapped = Object.values(staticMapping).filter(v => v === 'unmapped');
+                if (unmapped.length > 0) {
+                    setDetectingColumns(true);
+                    try {
+                        const res = await fetch('/api/leads/import/detect-columns', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ headers }),
+                        });
+                        if (res.ok) {
+                            const data = await res.json();
+                            // Merge: AI fills in only the unmapped ones
+                            const merged = { ...staticMapping };
+                            for (const [header, field] of Object.entries(data.mappings as Record<string, string>)) {
+                                if (merged[header] === 'unmapped' && field !== 'unmapped') {
+                                    merged[header] = field;
+                                }
+                            }
+                            setColumnMapping(merged);
+                        }
+                    } catch {
+                        // AI failed — static mapping already set, continue
+                    } finally {
+                        setDetectingColumns(false);
+                    }
+                }
+            }
+        } catch {
+            // File parsing failed
+        }
+    };
+
     const handleImport = async () => {
         if (!importFile) return;
         setImporting(true);
@@ -267,6 +439,7 @@ export default function SearchPage() {
             const formData = new FormData();
             formData.append('file', importFile);
             if (dbIndustry) formData.append('industry', dbIndustry);
+            if (columnMapping) formData.append('columnMapping', JSON.stringify(columnMapping));
 
             const res = await fetch('/api/leads/import', {
                 method: 'POST',
@@ -284,9 +457,13 @@ export default function SearchPage() {
                 setImportResult({
                     success: true,
                     message: data.message,
-                    details: `${data.saved} saved, ${data.skipped} skipped (missing email/LinkedIn). Columns detected: ${data.detected_columns.join(', ')}`,
+                    details: `${data.saved} saved, ${data.skipped} skipped. Columns detected: ${data.detected_columns.join(', ')}${data.unmapped_columns.length > 0 ? `. Unmapped: ${data.unmapped_columns.join(', ')}` : ''}`,
                 });
                 setImportFile(null);
+                setColumnMapping(null);
+                setPreviewHeaders([]);
+                setPreviewRows([]);
+                setPreviewTotalRows(0);
             }
         } catch {
             setImportResult({
@@ -546,7 +723,7 @@ export default function SearchPage() {
                                     </div>
                                     <div>
                                         <span className="text-xs font-black text-slate-900 uppercase tracking-widest block">Import Database</span>
-                                        <span className="text-[10px] text-secondary-400 font-medium">Upload a CSV file with your leads</span>
+                                        <span className="text-[10px] text-secondary-400 font-medium">Upload a CSV or Excel file with your leads</span>
                                     </div>
                                 </div>
 
@@ -558,9 +735,8 @@ export default function SearchPage() {
                                         e.preventDefault();
                                         setDragOver(false);
                                         const file = e.dataTransfer.files[0];
-                                        if (file && (file.name.endsWith('.csv') || file.name.endsWith('.tsv') || file.name.endsWith('.txt'))) {
-                                            setImportFile(file);
-                                            setImportResult(null);
+                                        if (file) {
+                                            handleFileSelected(file);
                                         }
                                     }}
                                     className={`relative border-2 border-dashed rounded-2xl p-6 text-center transition-all cursor-pointer group ${
@@ -573,13 +749,10 @@ export default function SearchPage() {
                                 >
                                     <input
                                         type="file"
-                                        accept=".csv,.tsv,.txt"
+                                        accept=".csv,.tsv,.txt,.xlsx,.xls"
                                         onChange={(e) => {
                                             const file = e.target.files?.[0];
-                                            if (file) {
-                                                setImportFile(file);
-                                                setImportResult(null);
-                                            }
+                                            if (file) handleFileSelected(file);
                                         }}
                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                     />
@@ -591,7 +764,7 @@ export default function SearchPage() {
                                                 {(importFile.size / 1024).toFixed(1)} KB
                                             </p>
                                             <button
-                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportFile(null); setImportResult(null); }}
+                                                onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportFile(null); setImportResult(null); setColumnMapping(null); setPreviewHeaders([]); setPreviewRows([]); setPreviewTotalRows(0); }}
                                                 className="text-[10px] font-bold text-red-500 hover:text-red-700 underline underline-offset-2"
                                             >
                                                 Remove file
@@ -601,32 +774,111 @@ export default function SearchPage() {
                                         <div className="space-y-2">
                                             <Upload size={28} className="text-secondary-300 mx-auto group-hover:text-primary-400 transition-colors" />
                                             <p className="text-xs font-bold text-slate-700">
-                                                Drop your CSV here or <span className="text-primary-600">browse</span>
+                                                Drop your file here or <span className="text-primary-600">browse</span>
                                             </p>
                                             <p className="text-[10px] text-secondary-400 font-medium">
-                                                Supports .csv files up to 10MB
+                                                Supports .csv and .xlsx files up to 10MB
                                             </p>
                                         </div>
                                     )}
                                 </div>
 
-                                {/* Column info */}
-                                <div className="text-[10px] text-secondary-400 font-medium space-y-1">
-                                    <p className="font-black text-secondary-500 uppercase tracking-widest">Auto-detected columns:</p>
-                                    <p>name, email, linkedin, company, job title, location, industry, domain</p>
-                                </div>
+                                {/* Preview: Column mapping + data table */}
+                                {previewHeaders.length > 0 && columnMapping && (
+                                    <div className="space-y-3 animate-in fade-in duration-300">
+                                        {/* Column mapping tags */}
+                                        <div className="text-[10px] space-y-2">
+                                            <p className="font-black text-secondary-500 uppercase tracking-widest flex items-center gap-1.5">
+                                                <Sparkles size={12} className="text-primary-500" />
+                                                Detected columns
+                                                {detectingColumns && <Loader2 size={10} className="animate-spin text-primary-400" />}
+                                            </p>
+                                            <div className="flex flex-wrap gap-1.5">
+                                                {Object.entries(columnMapping).map(([header, field]) => (
+                                                    <span
+                                                        key={header}
+                                                        className={`px-2 py-0.5 rounded-full font-bold ${
+                                                            field === 'unmapped'
+                                                                ? 'bg-secondary-100 text-secondary-400'
+                                                                : 'bg-primary-100 text-primary-700'
+                                                        }`}
+                                                    >
+                                                        {header} → {field === 'unmapped' ? 'skipped' : field.replace(/_/g, ' ')}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Data preview table */}
+                                        <div className="border border-secondary-200 rounded-xl overflow-hidden">
+                                            <div className="overflow-x-auto">
+                                                <table className="w-full text-[10px]">
+                                                    <thead>
+                                                        <tr className="bg-secondary-50">
+                                                            {previewHeaders.map(header => {
+                                                                const field = columnMapping[header];
+                                                                return (
+                                                                    <th key={header} className="px-3 py-2 text-left font-black uppercase tracking-widest whitespace-nowrap">
+                                                                        <div className={field && field !== 'unmapped' ? 'text-primary-700' : 'text-secondary-400'}>
+                                                                            {header}
+                                                                        </div>
+                                                                        <div className={`font-bold normal-case tracking-normal ${field && field !== 'unmapped' ? 'text-primary-500' : 'text-secondary-300'}`}>
+                                                                            {field && field !== 'unmapped' ? field.replace(/_/g, ' ') : 'skipped'}
+                                                                        </div>
+                                                                    </th>
+                                                                );
+                                                            })}
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {previewRows.map((row, i) => (
+                                                            <tr key={i} className="border-t border-secondary-100 hover:bg-secondary-50/50">
+                                                                {previewHeaders.map(header => (
+                                                                    <td key={header} className="px-3 py-2 text-slate-700 whitespace-nowrap max-w-[200px] truncate">
+                                                                        {row[header] || <span className="text-secondary-300">—</span>}
+                                                                    </td>
+                                                                ))}
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                            <div className="px-3 py-2 bg-secondary-50 border-t border-secondary-200 text-[10px] font-bold text-secondary-400">
+                                                Showing {previewRows.length} of {previewTotalRows} rows
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Template download */}
+                                {!importFile && (
+                                    <div className="flex gap-2">
+                                        <a
+                                            href="/api/leads/import/template?format=xlsx"
+                                            className="flex-1 py-2 text-center bg-secondary-50 border border-secondary-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-secondary-100 transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                            <Download size={12} /> Template .xlsx
+                                        </a>
+                                        <a
+                                            href="/api/leads/import/template?format=csv"
+                                            className="flex-1 py-2 text-center bg-secondary-50 border border-secondary-200 rounded-xl text-[10px] font-black uppercase tracking-widest text-slate-600 hover:bg-secondary-100 transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                            <Download size={12} /> Template .csv
+                                        </a>
+                                    </div>
+                                )}
 
                                 {/* Import button */}
-                                {importFile && (
+                                {importFile && previewHeaders.length > 0 && (
                                     <button
                                         onClick={handleImport}
-                                        disabled={importing}
+                                        disabled={importing || detectingColumns}
                                         className="w-full py-3 bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/25 disabled:opacity-50"
                                     >
                                         {importing ? (
-                                            <><Loader2 className="animate-spin" size={16} /> Importing...</>
+                                            <><Loader2 className="animate-spin" size={16} /> Importing {previewTotalRows} leads...</>
                                         ) : (
-                                            <><Upload size={16} /> Import {importFile.name}</>
+                                            <><Upload size={16} /> Import {previewTotalRows} leads from {importFile.name}</>
                                         )}
                                     </button>
                                 )}
@@ -838,12 +1090,62 @@ export default function SearchPage() {
                         <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
                             <div className="flex flex-col sm:flex-row justify-between items-center px-6 py-4 glass-card gap-4">
                                 <div className="flex items-center gap-8">
+                                    <button
+                                        onClick={() => {
+                                            if (selectedResultIds.size === results.length) {
+                                                setSelectedResultIds(new Set());
+                                            } else {
+                                                setSelectedResultIds(new Set(results.map(r => r.id)));
+                                            }
+                                        }}
+                                        className="text-secondary-500 hover:text-primary-600 transition-colors"
+                                        title={selectedResultIds.size === results.length ? 'Deselect all' : 'Select all'}
+                                    >
+                                        {selectedResultIds.size === 0
+                                            ? <Square size={20} />
+                                            : selectedResultIds.size === results.length
+                                                ? <CheckSquare size={20} className="text-primary-600" />
+                                                : <MinusSquare size={20} className="text-primary-600" />
+                                        }
+                                    </button>
                                     <div className="space-y-0.5">
                                         <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Results Found</span>
-                                        <p className="text-xl font-black text-slate-900">{results.length} Matches</p>
+                                        <p className="text-xl font-black text-slate-900">
+                                            {selectedResultIds.size > 0
+                                                ? `${selectedResultIds.size} / ${results.length} Selected`
+                                                : `${results.length} Matches`
+                                            }
+                                        </p>
                                     </div>
                                 </div>
                                 <div className="flex gap-2 w-full sm:w-auto">
+                                    {selectedResultIds.size > 0 && (
+                                        <button
+                                            onClick={async () => {
+                                                setSavingSelected(true);
+                                                try {
+                                                    const selectedLeads = results.filter(r => selectedResultIds.has(r.id));
+                                                    const res = await fetch('/api/leads/bulk', {
+                                                        method: 'POST',
+                                                        headers: { 'Content-Type': 'application/json' },
+                                                        body: JSON.stringify({ lead_ids: selectedLeads.map(l => l.id) }),
+                                                    });
+                                                    if (res.ok) {
+                                                        setSelectedResultIds(new Set());
+                                                    }
+                                                } finally {
+                                                    setSavingSelected(false);
+                                                }
+                                            }}
+                                            disabled={savingSelected}
+                                            className="flex-1 sm:flex-none px-6 py-2.5 bg-primary-600 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-primary-700 transition-all flex items-center gap-2 shadow-lg shadow-primary-600/25 disabled:opacity-50"
+                                        >
+                                            {savingSelected
+                                                ? <><Loader2 size={14} className="animate-spin" /> Saving...</>
+                                                : <><Plus size={14} /> Save {selectedResultIds.size} leads</>
+                                            }
+                                        </button>
+                                    )}
                                     <button
                                         onClick={handleExport}
                                         className="flex-1 sm:flex-none px-6 py-2.5 bg-white border border-secondary-200 rounded-xl text-xs font-black uppercase tracking-widest text-slate-700 hover:bg-secondary-50 transition-all flex items-center gap-2"
@@ -859,6 +1161,15 @@ export default function SearchPage() {
                                         key={result.id}
                                         result={result}
                                         delay={idx * 100}
+                                        selected={selectedResultIds.has(result.id)}
+                                        onToggleSelect={(id) => {
+                                            setSelectedResultIds(prev => {
+                                                const next = new Set(prev);
+                                                if (next.has(id)) next.delete(id);
+                                                else next.add(id);
+                                                return next;
+                                            });
+                                        }}
                                         onViewPipeline={(path) => router.push(path)}
                                     />
                                 ))}
@@ -1090,14 +1401,23 @@ function TagInput({ label, placeholder, tags, onChange }: { label: string; place
     );
 }
 
-function ResultCard({ result, delay, onViewPipeline }: { result: Lead; delay: number; onViewPipeline: (path: string) => void }) {
+function ResultCard({ result, delay, selected, onToggleSelect, onViewPipeline }: { result: Lead; delay: number; selected: boolean; onToggleSelect: (id: string) => void; onViewPipeline: (path: string) => void }) {
     return (
         <div
-            className="card p-6 md:p-8 group animate-in slide-in-from-bottom-4 relative overflow-hidden"
+            className={`card p-6 md:p-8 group animate-in slide-in-from-bottom-4 relative overflow-hidden transition-all ${selected ? 'ring-2 ring-primary-400 bg-primary-50/30' : ''}`}
             style={{ animationDelay: `${delay}ms` }}
         >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 relative z-10">
                 <div className="flex items-center gap-6 flex-1 min-w-0">
+                    <button
+                        onClick={() => onToggleSelect(result.id)}
+                        className="shrink-0 text-secondary-400 hover:text-primary-600 transition-colors"
+                    >
+                        {selected
+                            ? <CheckSquare size={20} className="text-primary-600" />
+                            : <Square size={20} />
+                        }
+                    </button>
                     <div className="relative shrink-0">
                         <div className="w-16 h-16 md:w-20 md:h-20 bg-gradient-to-br from-secondary-50 to-secondary-200 rounded-[2rem] flex items-center justify-center text-secondary-700 text-3xl font-black group-hover:scale-105 group-hover:-rotate-3 transition-all duration-500 border border-white/50 shadow-inner">
                             {(result.full_name ?? result.first_name ?? '?').charAt(0)}
