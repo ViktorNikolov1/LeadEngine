@@ -40,7 +40,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             .single();
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('Error updating lead:', error);
+            return NextResponse.json({ error: 'Failed to update lead' }, { status: 500 });
         }
 
         return NextResponse.json({ lead: data });
@@ -64,7 +65,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             .eq('user_id', user.id);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('Error deleting lead:', error);
+            return NextResponse.json({ error: 'Failed to delete lead' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

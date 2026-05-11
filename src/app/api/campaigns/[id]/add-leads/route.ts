@@ -45,7 +45,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 .select('id');
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Error adding leads to campaign:', error);
+                return NextResponse.json({ error: 'Failed to add leads to campaign' }, { status: 500 });
             }
             result = data;
         } else if (parsed.data.mode === 'ids') {
@@ -57,7 +58,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 .select('id');
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Error adding leads to campaign:', error);
+                return NextResponse.json({ error: 'Failed to add leads to campaign' }, { status: 500 });
             }
             result = data;
         } else {
@@ -70,7 +72,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
                 .select('id');
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Error adding leads to campaign:', error);
+                return NextResponse.json({ error: 'Failed to add leads to campaign' }, { status: 500 });
             }
             result = data;
         }

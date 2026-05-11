@@ -13,7 +13,8 @@ export async function GET(request: NextRequest) {
             .eq('user_id', user.id);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('Error fetching available leads:', error);
+            return NextResponse.json({ error: 'Failed to fetch available leads' }, { status: 500 });
         }
 
         const leads = data ?? [];

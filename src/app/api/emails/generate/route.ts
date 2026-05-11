@@ -8,7 +8,6 @@ const generateSchema = z.object({
     sender_name: z.string().min(1),
     sender_company: z.string().min(1),
     context: z.string().optional(),
-    model: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -54,7 +53,6 @@ export async function POST(request: NextRequest) {
             senderName: parsed.data.sender_name,
             senderCompany: parsed.data.sender_company,
             context: parsed.data.context,
-            model: parsed.data.model,
         });
 
         return NextResponse.json({ generated: result });

@@ -9,7 +9,6 @@ const schema = z.object({
     sender_company: z.string().min(1),
     from_email: z.email(),
     context: z.string().optional(),
-    model: z.string().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -29,7 +28,7 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'Invalid input', details: parsed.error.issues }, { status: 400 });
         }
 
-        const { campaign_id, sender_name, sender_company, from_email, context, model } = parsed.data;
+        const { campaign_id, sender_name, sender_company, from_email, context } = parsed.data;
 
         // Verify campaign belongs to user
         const { data: campaign } = await supabase
@@ -72,10 +71,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: 'All leads in this campaign already have emails.' }, { status: 400 });
         }
 
+        // Cap batch size to prevent runaway LLM spend
+        const MAX_BATCH_SIZE = 100;
+        const batch = eligibleLeads.slice(0, MAX_BATCH_SIZE);
+
         // Generate emails for each lead (sequential to respect rate limits)
         const results: { lead_id: string; lead_name: string; status: 'success' | 'error'; error?: string }[] = [];
 
-        for (const lead of eligibleLeads) {
+        for (const lead of batch) {
             try {
                 const generated = await generateOutreachEmail({
                     lead: {
@@ -91,7 +94,6 @@ export async function POST(request: NextRequest) {
                     senderName: sender_name,
                     senderCompany: sender_company,
                     context,
-                    model,
                 });
 
                 // Save as draft
@@ -121,9 +123,14 @@ export async function POST(request: NextRequest) {
         const successCount = results.filter(r => r.status === 'success').length;
         const errorCount = results.filter(r => r.status === 'error').length;
 
+        const cappedMessage = eligibleLeads.length > MAX_BATCH_SIZE
+            ? ` (capped at ${MAX_BATCH_SIZE} of ${eligibleLeads.length} eligible)`
+            : '';
+
         return NextResponse.json({
-            message: `Generated ${successCount} email drafts for campaign "${campaign.name}"`,
-            total: eligibleLeads.length,
+            message: `Generated ${successCount} email drafts for campaign "${campaign.name}"${cappedMessage}`,
+            total: batch.length,
+            totalEligible: eligibleLeads.length,
             success: successCount,
             errors: errorCount,
             results,

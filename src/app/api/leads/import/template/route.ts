@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as XLSX from 'xlsx';
+import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
+import ExcelJS from 'exceljs';
 
 const TEMPLATE_HEADERS = [
     'First Name',
@@ -28,6 +29,9 @@ const EXAMPLE_ROW = [
 ];
 
 export async function GET(request: NextRequest) {
+    const auth = await getAuthenticatedClient(request);
+    if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
+
     const format = request.nextUrl.searchParams.get('format') ?? 'xlsx';
 
     if (format === 'csv') {
@@ -45,14 +49,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: xlsx
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([TEMPLATE_HEADERS, EXAMPLE_ROW]);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Leads');
 
-    // Set column widths
-    ws['!cols'] = TEMPLATE_HEADERS.map(h => ({ wch: Math.max(h.length + 4, 18) }));
+    sheet.columns = TEMPLATE_HEADERS.map(h => ({
+        header: h,
+        key: h,
+        width: Math.max(h.length + 4, 18),
+    }));
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Leads');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const rowData: Record<string, string> = {};
+    TEMPLATE_HEADERS.forEach((h, i) => { rowData[h] = EXAMPLE_ROW[i]; });
+    sheet.addRow(rowData);
+
+    const buf = await workbook.xlsx.writeBuffer();
 
     return new NextResponse(buf, {
         headers: {

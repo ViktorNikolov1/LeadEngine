@@ -125,7 +125,7 @@ export async function POST(request: NextRequest) {
 
         if (!response.ok) {
             const errorBody = await response.text();
-            console.error(`OpenRouter API error (${response.status}):`, errorBody);
+            console.error(`OpenRouter API error (${response.status}):`, errorBody.slice(0, 200));
             return NextResponse.json(
                 { error: 'AI service request failed' },
                 { status: 502 },

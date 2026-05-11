@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod/v4';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
+/** Escape characters that have special meaning in PostgREST filter syntax */
+function sanitizeFilterValue(value: string): string {
+    return value.replace(/[%_.,()\\]/g, '');
+}
+
 const createEmailSchema = z.object({
     lead_id: z.uuid(),
     campaign_id: z.uuid().optional(),
     from_email: z.email(),
     to_email: z.email(),
     subject: z.string().min(1).max(500),
-    body_html: z.string().min(1),
+    body_html: z.string().min(1).max(50000),
     body_text: z.string().optional(),
 });
 
@@ -32,7 +37,8 @@ export async function GET(request: NextRequest) {
             query = query.eq('status', status);
         }
         if (search) {
-            query = query.or(`subject.ilike.%${search}%,to_email.ilike.%${search}%`);
+            const safe = sanitizeFilterValue(search);
+            query = query.or(`subject.ilike.%${safe}%,to_email.ilike.%${safe}%`);
         }
 
         const { data, error } = await query;

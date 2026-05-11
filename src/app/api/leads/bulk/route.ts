@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
                 .eq('user_id', user.id);
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Bulk operation error:', error);
+                return NextResponse.json({ error: 'Bulk operation failed' }, { status: 500 });
             }
 
             return NextResponse.json({ success: true, affected: ids.length });
@@ -59,7 +60,8 @@ export async function POST(request: NextRequest) {
                 .select();
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Bulk operation error:', error);
+                return NextResponse.json({ error: 'Bulk operation failed' }, { status: 500 });
             }
 
             return NextResponse.json({ success: true, affected: data?.length ?? 0, leads: data });
@@ -74,7 +76,8 @@ export async function POST(request: NextRequest) {
                 .select();
 
             if (error) {
-                return NextResponse.json({ error: error.message }, { status: 500 });
+                console.error('Bulk operation error:', error);
+                return NextResponse.json({ error: 'Bulk operation failed' }, { status: 500 });
             }
 
             return NextResponse.json({ success: true, affected: data?.length ?? 0 });

@@ -337,20 +337,30 @@ export default function SearchPage() {
             let allRows: Record<string, string>[] = [];
 
             if (name.endsWith('.xlsx') || name.endsWith('.xls')) {
-                const XLSX = await import('xlsx');
+                const ExcelJS = await import('exceljs');
                 const buffer = await file.arrayBuffer();
-                const wb = XLSX.read(buffer, { type: 'array' });
-                const ws = wb.Sheets[wb.SheetNames[0]];
-                if (ws) {
-                    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
-                    allRows = raw.map(row => {
-                        const stringRow: Record<string, string> = {};
-                        for (const [key, value] of Object.entries(row)) {
-                            stringRow[key] = value != null ? String(value) : '';
-                        }
-                        return stringRow;
+                const workbook = new ExcelJS.Workbook();
+                await workbook.xlsx.load(buffer);
+                const sheet = workbook.worksheets[0];
+                if (sheet && sheet.rowCount >= 2) {
+                    const hdrs: string[] = [];
+                    sheet.getRow(1).eachCell((cell, colNumber) => {
+                        hdrs[colNumber - 1] = cell.text?.trim() ?? '';
                     });
-                    if (allRows.length > 0) headers = Object.keys(allRows[0]);
+                    headers = hdrs;
+                    for (let i = 2; i <= sheet.rowCount; i++) {
+                        const row = sheet.getRow(i);
+                        const record: Record<string, string> = {};
+                        let hasValue = false;
+                        row.eachCell((cell, colNumber) => {
+                            const header = hdrs[colNumber - 1];
+                            if (header) {
+                                record[header] = cell.text?.trim() ?? '';
+                                if (record[header]) hasValue = true;
+                            }
+                        });
+                        if (hasValue) allRows.push(record);
+                    }
                 }
             } else {
                 const text = await file.text();

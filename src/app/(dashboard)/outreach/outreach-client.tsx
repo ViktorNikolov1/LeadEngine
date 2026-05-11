@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import type { EmailStats, EmailWithLead, Lead } from '@/types';
 import {
     Send,
@@ -950,7 +951,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
 
                                 <div>
                                     <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2">Body</p>
-                                    <div className="bg-secondary-50/50 rounded-2xl p-4 text-sm text-slate-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: viewingEmail.body_html }} />
+                                    <div className="bg-secondary-50/50 rounded-2xl p-4 text-sm text-slate-700 leading-relaxed" dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(viewingEmail.body_html) }} />
                                 </div>
 
                                 {/* Timeline */}

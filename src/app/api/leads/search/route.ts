@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
 
+/** Escape characters that have special meaning in PostgREST filter syntax */
+function sanitizeFilterValue(value: string): string {
+    return value.replace(/[%_.,()\\]/g, '');
+}
+
 export async function GET(request: NextRequest) {
     const auth = await getAuthenticatedClient(request);
     if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: auth.status });
@@ -15,13 +20,16 @@ export async function GET(request: NextRequest) {
         let query = supabase.from('leads').select('*').eq('user_id', user.id);
 
         if (jobTitle) {
-            query = query.ilike('job_title', `%${jobTitle}%`);
+            const safe = sanitizeFilterValue(jobTitle);
+            query = query.ilike('job_title', `%${safe}%`);
         }
         if (location) {
-            query = query.ilike('location', `%${location}%`);
+            const safe = sanitizeFilterValue(location);
+            query = query.ilike('location', `%${safe}%`);
         }
         if (industry) {
-            query = query.or(`industry.ilike.%${industry}%,company_name.ilike.%${industry}%,headline.ilike.%${industry}%`);
+            const safe = sanitizeFilterValue(industry);
+            query = query.or(`industry.ilike.%${safe}%,company_name.ilike.%${safe}%,headline.ilike.%${safe}%`);
         }
 
         const { data, error } = await query.order('created_at', { ascending: false }).limit(50);
