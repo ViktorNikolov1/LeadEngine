@@ -116,7 +116,7 @@ export async function parseSearchQuery(query: string): Promise<ParsedSearchFilte
 
     if (!response.ok) {
         const errorBody = await response.text();
-        console.error(`OpenRouter API error (${response.status}):`, errorBody);
+        console.error(`OpenRouter API error (${response.status}):`, errorBody.slice(0, 200));
         throw new Error(`AI service request failed with status ${response.status}`);
     }
 

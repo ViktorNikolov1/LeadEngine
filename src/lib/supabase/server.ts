@@ -204,7 +204,8 @@ export async function fetchEmails(userId: string, filters?: { status?: string; s
     }
 
     if (filters?.search) {
-        query = query.or(`subject.ilike.%${filters.search}%,to_email.ilike.%${filters.search}%`);
+        const safe = filters.search.replace(/[%_.,()\\]/g, '');
+        query = query.or(`subject.ilike.%${safe}%,to_email.ilike.%${safe}%`);
     }
 
     const { data, error } = await query;

@@ -32,7 +32,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
             .single();
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('Error updating campaign:', error);
+            return NextResponse.json({ error: 'Failed to update campaign' }, { status: 500 });
         }
 
         return NextResponse.json({ campaign: data });
@@ -56,7 +57,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             .eq('user_id', user.id);
 
         if (error) {
-            return NextResponse.json({ error: error.message }, { status: 500 });
+            console.error('Error deleting campaign:', error);
+            return NextResponse.json({ error: 'Failed to delete campaign' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true });

@@ -26,7 +26,7 @@ export async function apifyFetch<T>(
 
     if (!response.ok) {
         const body = await response.text();
-        console.error(`Apify API error ${response.status}:`, body);
+        console.error(`Apify API error ${response.status}:`, body.slice(0, 200));
         throw new Error(`Apify API request failed with status ${response.status}`);
     }
 

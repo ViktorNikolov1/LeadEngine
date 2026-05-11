@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthenticatedClient } from '@/lib/supabase/auth-api';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 
 type ParsedLead = {
     linkedin_url: string;
@@ -229,20 +229,33 @@ function parseCSV(text: string): Record<string, string>[] {
 
 // ---- XLSX parsing ----
 
-function parseXLSX(buffer: ArrayBuffer): Record<string, string>[] {
-    const workbook = XLSX.read(buffer, { type: 'array' });
-    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-    if (!firstSheet) return [];
+async function parseXLSX(buffer: ArrayBuffer): Promise<Record<string, string>[]> {
+    const workbook = new ExcelJS.Workbook();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await workbook.xlsx.load(Buffer.from(buffer) as any);
+    const sheet = workbook.worksheets[0];
+    if (!sheet || sheet.rowCount < 2) return [];
 
-    const raw = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: '' });
-
-    return raw.map(row => {
-        const stringRow: Record<string, string> = {};
-        for (const [key, value] of Object.entries(row)) {
-            stringRow[key] = value != null ? String(value) : '';
-        }
-        return stringRow;
+    const headers: string[] = [];
+    sheet.getRow(1).eachCell((cell, colNumber) => {
+        headers[colNumber - 1] = cell.text?.trim() ?? '';
     });
+
+    const rows: Record<string, string>[] = [];
+    for (let i = 2; i <= sheet.rowCount; i++) {
+        const row = sheet.getRow(i);
+        const record: Record<string, string> = {};
+        let hasValue = false;
+        row.eachCell((cell, colNumber) => {
+            const header = headers[colNumber - 1];
+            if (header) {
+                record[header] = cell.text?.trim() ?? '';
+                if (record[header]) hasValue = true;
+            }
+        });
+        if (hasValue) rows.push(record);
+    }
+    return rows;
 }
 
 // ---- Row mapping ----
@@ -345,7 +358,7 @@ export async function POST(request: NextRequest) {
         let rows: Record<string, string>[];
         if (isExcel) {
             const buffer = await file.arrayBuffer();
-            rows = parseXLSX(buffer);
+            rows = await parseXLSX(buffer);
         } else {
             const text = await file.text();
             rows = parseCSV(text);

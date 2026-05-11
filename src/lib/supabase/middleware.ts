@@ -39,7 +39,7 @@ export async function updateSession(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Public routes that don't require auth
-    const isAuthRoute = pathname === '/login';
+    const isAuthRoute = pathname === '/login' || pathname === '/update-password';
 
     // Block registration — redirect to login
     if (pathname === '/register') {
@@ -49,8 +49,8 @@ export async function updateSession(request: NextRequest) {
     }
     const isStaticAsset = pathname.startsWith('/_next/') || pathname.startsWith('/favicon');
 
-    // Public API routes that don't require auth (webhooks need external access)
-    const isPublicApi = pathname.startsWith('/api/webhooks') || pathname.startsWith('/api/auth/');
+    // Public API routes that don't require auth (webhooks need external access, auth callback exchanges tokens)
+    const isPublicApi = pathname.startsWith('/api/webhooks') || pathname.startsWith('/api/auth/') || pathname.startsWith('/auth/callback');
 
     // Allow static assets and public APIs through
     if (isStaticAsset || isPublicApi) {
@@ -64,8 +64,8 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url);
     }
 
-    // Logged in — redirect away from auth pages to dashboard
-    if (user && isAuthRoute) {
+    // Logged in — redirect away from auth pages to dashboard (but allow update-password)
+    if (user && isAuthRoute && pathname !== '/update-password') {
         const url = request.nextUrl.clone();
         url.pathname = '/';
         return NextResponse.redirect(url);

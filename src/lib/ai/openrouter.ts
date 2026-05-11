@@ -7,7 +7,6 @@ type GenerateEmailParams = {
     senderName: string;
     senderCompany: string;
     context?: string;
-    model?: string;
 };
 
 type GenerateEmailResult = {
@@ -38,7 +37,7 @@ function sanitizeField(value: string | null | undefined): string {
 
 function buildPrompt(params: GenerateEmailParams): string {
     const enrichmentContext = params.lead.enrichment_data
-        ? `\n<lead_context>${JSON.stringify(params.lead.enrichment_data, null, 2).slice(0, 2000)}</lead_context>`
+        ? `\n<lead_context>${sanitizeField(JSON.stringify(params.lead.enrichment_data, null, 2).slice(0, 2000))}</lead_context>`
         : '';
 
     const userContext = params.context
@@ -82,7 +81,7 @@ For bodyHtml, use simple HTML: <p> tags for paragraphs, <br> for line breaks. No
 
 export async function generateOutreachEmail(params: GenerateEmailParams): Promise<GenerateEmailResult> {
     const apiKey = getApiKey();
-    const model = params.model ?? getDefaultModel();
+    const model = getDefaultModel();
 
     const response = await fetch(OPENROUTER_API_URL, {
         method: 'POST',
@@ -111,7 +110,7 @@ export async function generateOutreachEmail(params: GenerateEmailParams): Promis
 
     if (!response.ok) {
         const errorBody = await response.text();
-        console.error(`OpenRouter API error (${response.status}):`, errorBody);
+        console.error(`OpenRouter API error (${response.status}):`, errorBody.slice(0, 200));
         throw new Error(`AI service request failed with status ${response.status}`);
     }
 
