@@ -7,6 +7,7 @@ const updateCampaignSchema = z.object({
     status: z.enum(['active', 'paused', 'completed']).optional(),
     target_leads: z.number().int().min(1).max(1_000_000).nullable().optional(),
     search_criteria: z.record(z.string(), z.unknown()).nullable().optional(),
+    context: z.string().max(50_000).nullable().optional(),
 }).strict();
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

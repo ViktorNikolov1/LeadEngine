@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Search,
@@ -8,6 +8,7 @@ import {
     Plus,
     MoreHorizontal,
     ChevronRight,
+    ChevronDown,
     Target,
     History,
     Mail,
@@ -34,8 +35,9 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
     const [showPreview, setShowPreview] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
-    const [filterStatus, setFilterStatus] = useState<string | null>(null);
-    const [showFilterMenu, setShowFilterMenu] = useState(false);
+    const [columnFilters, setColumnFilters] = useState<Record<string, Set<string>>>({});
+    const [activeFilterColumn, setActiveFilterColumn] = useState<string | null>(null);
+    const filterDropdownRef = useRef<HTMLDivElement>(null);
     const [exporting, setExporting] = useState(false);
     const [actionMenuId, setActionMenuId] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -56,8 +58,6 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                 body: JSON.stringify({ mode: 'ids', leadIds: Array.from(selectedIds) }),
             });
             if (res.ok) {
-                const { added } = await res.json();
-                // Update local state to reflect the campaign assignment
                 setLeads(prev => prev.map(l =>
                     selectedIds.has(l.id) ? { ...l, campaign_id: campaignId } : l
                 ));
@@ -67,6 +67,27 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
             // silent
         } finally {
             setBulkLoading(false);
+        }
+    };
+
+    const handleAssignSingleLead = async (leadId: string, campaignId: string) => {
+        setActionMenuId(null);
+        try {
+            const res = await fetch(`/api/campaigns/${campaignId}/add-leads`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'ids', leadIds: [leadId] }),
+            });
+            if (res.ok) {
+                setLeads(prev => prev.map(l =>
+                    l.id === leadId ? { ...l, campaign_id: campaignId } : l
+                ));
+                if (selectedLead?.id === leadId) {
+                    setSelectedLead(prev => prev ? { ...prev, campaign_id: campaignId } : prev);
+                }
+            }
+        } catch {
+            // silent
         }
     };
 
@@ -132,13 +153,82 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
         }
     };
 
+    // --- Column filter helpers ---
+
+    // Close filter dropdown on outside click
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (filterDropdownRef.current && !filterDropdownRef.current.contains(e.target as Node)) {
+                setActiveFilterColumn(null);
+            }
+        };
+        if (activeFilterColumn) document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [activeFilterColumn]);
+
+    const columnOptions = useMemo(() => {
+        const extract = (key: string, getter: (l: Lead) => string | null | undefined) => {
+            const vals = new Set<string>();
+            for (const l of leads) {
+                const v = getter(l);
+                if (v) vals.add(v);
+            }
+            return Array.from(vals).sort((a, b) => a.localeCompare(b));
+        };
+        return {
+            stage: extract('stage', l => l.status),
+            industry: extract('industry', l => l.industry),
+            company: extract('company', l => l.company_name),
+            location: extract('location', l => l.location),
+            campaign: extract('campaign', l => l.campaign_id ? (campaigns.find(c => c.id === l.campaign_id)?.name ?? null) : null),
+        };
+    }, [leads, campaigns]);
+
+    const toggleColumnFilter = (column: string, value: string) => {
+        setColumnFilters(prev => {
+            const current = new Set(prev[column] ?? []);
+            if (current.has(value)) current.delete(value);
+            else current.add(value);
+            const next = { ...prev };
+            if (current.size === 0) delete next[column];
+            else next[column] = current;
+            return next;
+        });
+    };
+
+    const clearColumnFilter = (column: string) => {
+        setColumnFilters(prev => {
+            const next = { ...prev };
+            delete next[column];
+            return next;
+        });
+    };
+
+    const clearAllFilters = () => setColumnFilters({});
+
+    const activeFilterCount = Object.keys(columnFilters).length;
+
+    const getColumnValue = (lead: Lead, column: string): string | null => {
+        switch (column) {
+            case 'stage': return lead.status;
+            case 'industry': return lead.industry;
+            case 'company': return lead.company_name;
+            case 'location': return lead.location;
+            case 'campaign': return lead.campaign_id ? (campaigns.find(c => c.id === lead.campaign_id)?.name ?? null) : null;
+            default: return null;
+        }
+    };
+
     // --- Multi-select handlers ---
 
     const filteredLeads = leads.filter(lead => {
         const matchesSearch = !searchQuery || [lead.full_name, lead.first_name, lead.last_name, lead.company_name, lead.job_title, lead.email]
             .some(f => f?.toLowerCase().includes(searchQuery.toLowerCase()));
-        const matchesFilter = !filterStatus || lead.status === filterStatus;
-        return matchesSearch && matchesFilter;
+        const matchesColumns = Object.entries(columnFilters).every(([col, values]) => {
+            const v = getColumnValue(lead, col);
+            return v !== null && values.has(v);
+        });
+        return matchesSearch && matchesColumns;
     });
 
     const filteredIds = filteredLeads.map(l => l.id);
@@ -279,38 +369,16 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                         className="w-full bg-white/60 backdrop-blur-md border border-secondary-200 rounded-3xl py-4 pl-14 pr-4 transition-all focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none font-bold text-slate-900 shadow-sm"
                     />
                 </div>
-                <div className="relative shrink-0">
+                {activeFilterCount > 0 && (
                     <button
-                        onClick={() => { setShowFilterMenu(!showFilterMenu); }}
-                        className={`flex items-center justify-center gap-3 px-6 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm group whitespace-nowrap ${filterStatus ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
+                        onClick={clearAllFilters}
+                        className="flex items-center justify-center gap-3 px-6 py-4 bg-primary-50 hover:bg-primary-100 border border-primary-300 rounded-3xl text-sm font-black uppercase tracking-widest text-primary-700 transition-all shadow-sm whitespace-nowrap"
                     >
-                        <Filter size={18} className="text-secondary-400 group-hover:text-primary-500 group-hover:scale-110 transition-all" />
-                        {filterStatus ?? 'Status'}
-                        {filterStatus && (
-                            <X size={14} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setFilterStatus(null); setShowFilterMenu(false); }} />
-                        )}
+                        <Filter size={18} />
+                        {activeFilterCount} filter{activeFilterCount !== 1 ? 's' : ''} active
+                        <X size={14} className="text-primary-400 hover:text-red-500" />
                     </button>
-                    {showFilterMenu && (
-                        <div className="absolute top-full mt-2 right-0 bg-white border border-secondary-200 rounded-2xl shadow-2xl z-50 py-2 min-w-[180px]">
-                            {statuses.map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => { setFilterStatus(s); setShowFilterMenu(false); }}
-                                    className={`w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest hover:bg-secondary-50 transition-colors ${filterStatus === s ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
-                                >
-                                    {s}
-                                </button>
-                            ))}
-                            <hr className="my-1 border-secondary-100" />
-                            <button
-                                onClick={() => { setFilterStatus(null); setShowFilterMenu(false); }}
-                                className="w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest text-secondary-400 hover:bg-secondary-50 transition-colors"
-                            >
-                                Clear filter
-                            </button>
-                        </div>
-                    )}
-                </div>
+                )}
             </div>
 
             {/* Bulk Action Bar */}
@@ -394,10 +462,10 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                             <Target size={36} className="text-secondary-400" />
                         </div>
                         <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">
-                            {searchQuery || filterStatus ? 'No matching leads' : 'No leads yet'}
+                            {searchQuery || activeFilterCount > 0 ? 'No matching leads' : 'No leads yet'}
                         </h3>
                         <p className="text-secondary-500 max-w-md font-medium">
-                            {searchQuery || filterStatus
+                            {searchQuery || activeFilterCount > 0
                                 ? 'Try adjusting your search or filter criteria.'
                                 : 'Use the Advanced Search to discover prospects or run a scraping campaign to populate your pipeline.'}
                         </p>
@@ -429,11 +497,11 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                         </button>
                                     </th>
                                     <th className="px-2 py-3">Identity</th>
-                                    <th className="px-2 py-3">Stage</th>
-                                    <th className="px-2 py-3">Industry</th>
-                                    <th className="px-2 py-3">Company</th>
-                                    <th className="px-2 py-3">Location</th>
-                                    <th className="px-2 py-3">Campaign</th>
+                                    <FilterableHeader column="stage" label="Stage" options={columnOptions.stage} activeColumn={activeFilterColumn} setActiveColumn={setActiveFilterColumn} filters={columnFilters} toggleFilter={toggleColumnFilter} clearFilter={clearColumnFilter} dropdownRef={filterDropdownRef} />
+                                    <FilterableHeader column="industry" label="Industry" options={columnOptions.industry} activeColumn={activeFilterColumn} setActiveColumn={setActiveFilterColumn} filters={columnFilters} toggleFilter={toggleColumnFilter} clearFilter={clearColumnFilter} dropdownRef={filterDropdownRef} />
+                                    <FilterableHeader column="company" label="Company" options={columnOptions.company} activeColumn={activeFilterColumn} setActiveColumn={setActiveFilterColumn} filters={columnFilters} toggleFilter={toggleColumnFilter} clearFilter={clearColumnFilter} dropdownRef={filterDropdownRef} />
+                                    <FilterableHeader column="location" label="Location" options={columnOptions.location} activeColumn={activeFilterColumn} setActiveColumn={setActiveFilterColumn} filters={columnFilters} toggleFilter={toggleColumnFilter} clearFilter={clearColumnFilter} dropdownRef={filterDropdownRef} />
+                                    <FilterableHeader column="campaign" label="Campaign" options={columnOptions.campaign} activeColumn={activeFilterColumn} setActiveColumn={setActiveFilterColumn} filters={columnFilters} toggleFilter={toggleColumnFilter} clearFilter={clearColumnFilter} dropdownRef={filterDropdownRef} />
                                     <th className="px-2 py-3">Touch</th>
                                     <th className="px-2 py-3 text-right pr-3">Actions</th>
                                 </tr>
@@ -543,14 +611,32 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                                             <MoreHorizontal size={14} />
                                                         </button>
                                                         {actionMenuId === lead.id && (
-                                                            <div className="absolute top-full right-0 mt-1 bg-white border border-secondary-200 rounded-xl shadow-2xl z-50 py-1 min-w-[160px]">
+                                                            <div className="absolute top-full right-0 mt-1 bg-white border border-secondary-200 rounded-xl shadow-2xl z-50 py-1 min-w-[200px] max-h-[400px] overflow-y-auto custom-scrollbar">
+                                                                {campaigns.filter(c => c.status !== 'completed').length > 0 && (
+                                                                    <>
+                                                                        <p className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-secondary-400">Assign to Campaign</p>
+                                                                        {campaigns.filter(c => c.status !== 'completed').map(c => (
+                                                                            <button
+                                                                                key={c.id}
+                                                                                onClick={(e) => { e.stopPropagation(); handleAssignSingleLead(lead.id, c.id); }}
+                                                                                className={`w-full px-4 py-2 text-left text-xs font-bold hover:bg-primary-50 transition-colors flex items-center gap-2 ${lead.campaign_id === c.id ? 'text-primary-600 bg-primary-50/50' : 'text-slate-600'}`}
+                                                                            >
+                                                                                <Target size={12} className="text-primary-500 shrink-0" />
+                                                                                <span className="truncate">{c.name}</span>
+                                                                                {lead.campaign_id === c.id && <span className="text-[9px] text-primary-400 ml-auto shrink-0">current</span>}
+                                                                            </button>
+                                                                        ))}
+                                                                        <hr className="my-1 border-secondary-100" />
+                                                                    </>
+                                                                )}
+                                                                <p className="px-4 py-1.5 text-[9px] font-black uppercase tracking-widest text-secondary-400">Set Status</p>
                                                                 {statuses.filter(s => s !== lead.status).map(s => (
                                                                     <button
                                                                         key={s}
                                                                         onClick={(e) => { e.stopPropagation(); handleStatusChange(lead, s); setActionMenuId(null); }}
                                                                         className="w-full px-4 py-2 text-left text-xs font-bold uppercase tracking-wider text-slate-600 hover:bg-secondary-50"
                                                                     >
-                                                                        Set {s}
+                                                                        {s}
                                                                     </button>
                                                                 ))}
                                                                 <hr className="my-1 border-secondary-100" />
@@ -635,6 +721,23 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                                     </a>
                                 )}
                             </div>
+                            {campaigns.filter(c => c.status !== 'completed').length > 0 && (
+                                <div className="space-y-3">
+                                    <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Assign to Campaign</p>
+                                    <div className="flex flex-wrap gap-2">
+                                        {campaigns.filter(c => c.status !== 'completed').map(c => (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => { handleAssignSingleLead(selectedLead.id, c.id); }}
+                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border transition-all flex items-center gap-1.5 ${selectedLead.campaign_id === c.id ? 'bg-primary-100 text-primary-700 border-primary-200' : 'bg-white text-slate-600 border-secondary-200 hover:bg-primary-50'}`}
+                                            >
+                                                <Target size={10} />
+                                                {c.name}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                             <div className="space-y-3">
                                 <p className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Change Status</p>
                                 <div className="flex flex-wrap gap-2">
@@ -829,5 +932,104 @@ function IndustryBadge({ industry }: { industry: string }) {
         <span className={`inline-flex px-3 py-1 rounded-xl text-[10px] font-black uppercase tracking-widest border ${colors}`}>
             {formatIndustryLabel(industry)}
         </span>
+    );
+}
+
+function FilterableHeader({
+    column,
+    label,
+    options,
+    activeColumn,
+    setActiveColumn,
+    filters,
+    toggleFilter,
+    clearFilter,
+    dropdownRef,
+}: {
+    column: string;
+    label: string;
+    options: string[];
+    activeColumn: string | null;
+    setActiveColumn: (col: string | null) => void;
+    filters: Record<string, Set<string>>;
+    toggleFilter: (col: string, val: string) => void;
+    clearFilter: (col: string) => void;
+    dropdownRef: React.RefObject<HTMLDivElement | null>;
+}) {
+    const isOpen = activeColumn === column;
+    const hasFilter = column in filters;
+    const selectedCount = filters[column]?.size ?? 0;
+    const [filterSearch, setFilterSearch] = useState('');
+
+    const displayOptions = filterSearch
+        ? options.filter(o => o.toLowerCase().includes(filterSearch.toLowerCase()))
+        : options;
+
+    return (
+        <th className="px-2 py-3 relative">
+            <button
+                onClick={() => setActiveColumn(isOpen ? null : column)}
+                className={`flex items-center gap-1 hover:text-primary-600 transition-colors ${hasFilter ? 'text-primary-600' : ''}`}
+            >
+                {label}
+                {hasFilter && (
+                    <span className="ml-0.5 w-4 h-4 rounded-full bg-primary-500 text-white text-[8px] flex items-center justify-center font-black not-italic">
+                        {selectedCount}
+                    </span>
+                )}
+                <ChevronDown size={12} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+            </button>
+            {isOpen && (
+                <div
+                    ref={dropdownRef}
+                    className="absolute top-full left-0 mt-1 bg-white border border-secondary-200 rounded-2xl shadow-2xl z-50 py-2 min-w-[200px] max-h-[320px] flex flex-col animate-in fade-in slide-in-from-top-2 duration-200"
+                >
+                    {options.length > 6 && (
+                        <div className="px-3 pb-2">
+                            <input
+                                type="text"
+                                placeholder={`Search ${label.toLowerCase()}...`}
+                                value={filterSearch}
+                                onChange={(e) => setFilterSearch(e.target.value)}
+                                className="w-full px-3 py-1.5 text-xs border border-secondary-200 rounded-lg outline-none focus:border-primary-400 font-medium text-slate-700"
+                                onClick={(e) => e.stopPropagation()}
+                            />
+                        </div>
+                    )}
+                    <div className="overflow-y-auto flex-1 custom-scrollbar">
+                        {displayOptions.length === 0 ? (
+                            <p className="px-4 py-2 text-xs text-secondary-400 font-medium">No matches</p>
+                        ) : (
+                            displayOptions.map(val => {
+                                const isChecked = filters[column]?.has(val) ?? false;
+                                return (
+                                    <button
+                                        key={val}
+                                        onClick={(e) => { e.stopPropagation(); toggleFilter(column, val); }}
+                                        className="w-full px-3 py-2 text-left text-xs font-bold hover:bg-secondary-50 transition-colors flex items-center gap-2.5"
+                                    >
+                                        <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${isChecked ? 'bg-primary-500 border-primary-500 text-white' : 'border-secondary-300'}`}>
+                                            {isChecked && <span className="text-[10px]">&#10003;</span>}
+                                        </span>
+                                        <span className={`truncate ${isChecked ? 'text-primary-700' : 'text-slate-600'}`}>{val}</span>
+                                    </button>
+                                );
+                            })
+                        )}
+                    </div>
+                    {hasFilter && (
+                        <>
+                            <hr className="my-1 border-secondary-100" />
+                            <button
+                                onClick={(e) => { e.stopPropagation(); clearFilter(column); setFilterSearch(''); }}
+                                className="w-full px-3 py-2 text-left text-[10px] font-black uppercase tracking-widest text-secondary-400 hover:text-red-500 hover:bg-secondary-50 transition-colors"
+                            >
+                                Clear filter
+                            </button>
+                        </>
+                    )}
+                </div>
+            )}
+        </th>
     );
 }

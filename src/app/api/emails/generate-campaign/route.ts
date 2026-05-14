@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
         // Verify campaign belongs to user
         const { data: campaign } = await supabase
             .from('campaigns')
-            .select('id, name')
+            .select('id, name, context')
             .eq('id', campaign_id)
             .eq('user_id', user.id)
             .single();
@@ -41,6 +41,9 @@ export async function POST(request: NextRequest) {
         if (!campaign) {
             return NextResponse.json({ error: 'Campaign not found' }, { status: 404 });
         }
+
+        // Use request context, falling back to saved campaign context
+        const effectiveContext = context || campaign.context || undefined;
 
         // Fetch leads in the campaign that have email and haven't been contacted yet
         const { data: leads } = await supabase
@@ -93,7 +96,7 @@ export async function POST(request: NextRequest) {
                     },
                     senderName: sender_name,
                     senderCompany: sender_company,
-                    context,
+                    context: effectiveContext,
                 });
 
                 // Save as draft

@@ -21,6 +21,7 @@ import {
     Search,
 } from 'lucide-react';
 import type { Lead } from '@/types';
+import { FunnelChart } from '@/components/ui/FunnelChart';
 
 type DashboardProps = {
     leadStats: Record<string, number>;
@@ -92,6 +93,20 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                     icon={<TrendingUp size={20} className="text-amber-500" />}
                     color="from-amber-500/10 to-amber-500/5"
                     delay="300"
+                />
+            </div>
+
+            {/* Pipeline Conversion Funnel */}
+            <div className="w-full">
+                <FunnelChart 
+                    title="Pipeline Conversion Funnel" 
+                    description="Visualize how leads convert through each stage of your outreach process."
+                    data={[
+                        { id: 'new', label: 'New Leads', value: leadStats.new ?? 0, colorClass: 'bg-blue-500 text-white' },
+                        { id: 'enriched', label: 'Enriched', value: leadStats.enriched ?? 0, colorClass: 'bg-slate-500 text-white' },
+                        { id: 'contacted', label: 'Contacted', value: leadStats.contacted ?? 0, colorClass: 'bg-amber-500 text-white' },
+                        { id: 'replied', label: 'Replied', value: leadStats.replied ?? 0, colorClass: 'bg-purple-500 text-white' },
+                    ]}
                 />
             </div>
 

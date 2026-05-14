@@ -7,7 +7,6 @@ import {
     Send,
     Mail,
     MailOpen,
-    MousePointerClick,
     AlertTriangle,
     Search,
     Filter,
@@ -42,8 +41,6 @@ type OutreachClientProps = {
 
 type ActiveTab = 'compose' | 'campaign' | 'sent' | 'tracking';
 
-type EmailStatus = 'draft' | 'approved' | 'sent' | 'delivered' | 'opened' | 'clicked' | 'bounced' | 'complained' | 'failed';
-
 type BatchResult = {
     lead_id: string;
     lead_name: string;
@@ -57,7 +54,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
     const [stats, setStats] = useState<EmailStats>(initialStats);
     const [filterStatus, setFilterStatus] = useState<string | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
-    const [showFilterMenu, setShowFilterMenu] = useState(false);
+
 
     // Compose state
     const [selectedLeadId, setSelectedLeadId] = useState<string>('');
@@ -106,8 +103,9 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
         }
     }, [leads]);
 
-    const openRate = stats.delivered > 0 ? Math.round((stats.opened / stats.delivered) * 100) : 0;
-    const clickRate = stats.opened > 0 ? Math.round((stats.clicked / stats.opened) * 100) : 0;
+    const readyToSend = stats.drafts + stats.approved;
+    const failed = stats.bounced;
+    const deliveryRate = stats.sent > 0 ? Math.round((stats.delivered / stats.sent) * 100) : 0;
 
     const filteredLeads = leads.filter(l =>
         (l.full_name?.toLowerCase().includes(leadSearch.toLowerCase()) ||
@@ -115,7 +113,8 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
     );
 
     const filteredEmails = emails.filter(e => {
-        const matchesStatus = !filterStatus || e.status === filterStatus;
+        const activeGroup = filterGroups.find(g => g.key === filterStatus);
+        const matchesStatus = !activeGroup || activeGroup.statuses.includes(e.status);
         const matchesSearch = !searchQuery ||
             e.lead?.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             e.to_email.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -123,7 +122,12 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
         return matchesStatus && matchesSearch;
     });
 
-    const statuses: EmailStatus[] = ['draft', 'approved', 'sent', 'delivered', 'opened', 'clicked', 'bounced', 'failed'];
+    const filterGroups: { label: string; key: string; statuses: string[]; icon: React.ReactNode }[] = [
+        { label: 'Drafted', key: 'drafted', statuses: ['draft', 'approved'], icon: <Clock size={14} /> },
+        { label: 'Sent', key: 'sent', statuses: ['sent', 'delivered'], icon: <Send size={14} /> },
+        { label: 'Responded', key: 'responded', statuses: ['opened', 'clicked'], icon: <MailOpen size={14} /> },
+        { label: 'Opt-out', key: 'optout', statuses: ['complained', 'bounced', 'failed'], icon: <AlertTriangle size={14} /> },
+    ];
 
     const refreshEmails = useCallback(async () => {
         const [emailsRes, statsRes] = await Promise.all([
@@ -366,10 +370,10 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
 
             {/* Stats Overview */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard icon={<Mail size={20} />} label="Total Emails" value={stats.total} color="text-slate-600" bg="bg-slate-100" delay="0" />
+                <StatCard icon={<Clock size={20} />} label="Ready to Send" value={readyToSend} color="text-amber-600" bg="bg-amber-100" delay="0" />
                 <StatCard icon={<Send size={20} />} label="Sent" value={stats.sent} color="text-blue-600" bg="bg-blue-100" delay="100" />
-                <StatCard icon={<MailOpen size={20} />} label="Opened" value={stats.opened} subValue={`${openRate}% rate`} color="text-emerald-600" bg="bg-emerald-100" delay="200" />
-                <StatCard icon={<MousePointerClick size={20} />} label="Clicked" value={stats.clicked} subValue={`${clickRate}% rate`} color="text-purple-600" bg="bg-purple-100" delay="300" />
+                <StatCard icon={<CheckCircle2 size={20} />} label="Delivered" value={stats.delivered} subValue={`${deliveryRate}% rate`} color="text-emerald-600" bg="bg-emerald-100" delay="200" />
+                <StatCard icon={<AlertTriangle size={20} />} label="Failed" value={failed} color="text-red-600" bg="bg-red-100" delay="300" />
             </div>
 
             {/* Tab Navigation */}
@@ -390,15 +394,23 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
                 <div className="space-y-6 animate-in fade-in duration-300">
                     <div className="card p-8 shadow-2xl">
                         <h3 className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-6 flex items-center gap-2">
-                            <BarChart3 size={14} className="text-primary-500" /> Delivery Funnel
+                            <BarChart3 size={14} className="text-primary-500" /> Outreach Pipeline
                         </h3>
-                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <FunnelStep label="Drafted" count={readyToSend} icon={<Clock size={16} />} color="bg-amber-500" />
                             <FunnelStep label="Sent" count={stats.sent} icon={<Send size={16} />} color="bg-blue-500" />
                             <FunnelStep label="Delivered" count={stats.delivered} icon={<CheckCircle2 size={16} />} color="bg-emerald-500" />
-                            <FunnelStep label="Opened" count={stats.opened} icon={<MailOpen size={16} />} color="bg-amber-500" />
-                            <FunnelStep label="Clicked" count={stats.clicked} icon={<MousePointerClick size={16} />} color="bg-purple-500" />
-                            <FunnelStep label="Bounced" count={stats.bounced} icon={<AlertTriangle size={16} />} color="bg-red-500" />
+                            <FunnelStep label="Failed" count={failed} icon={<AlertTriangle size={16} />} color="bg-red-500" />
                         </div>
+                        {stats.sent > 0 && (
+                            <div className="mt-6 pt-6 border-t border-secondary-100 flex items-center gap-3">
+                                <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Delivery Rate</span>
+                                <div className="flex-1 h-2 bg-secondary-100 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-500 rounded-full transition-all duration-700" style={{ width: `${deliveryRate}%` }} />
+                                </div>
+                                <span className="text-sm font-black text-slate-900">{deliveryRate}%</span>
+                            </div>
+                        )}
                     </div>
 
                     {stats.total === 0 && (
@@ -408,7 +420,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
                             </div>
                             <h3 className="text-2xl font-black text-slate-900 mb-4 uppercase tracking-tighter">No tracking data yet</h3>
                             <p className="text-secondary-500 max-w-sm mx-auto font-medium leading-relaxed">
-                                Start sending emails to see delivery, open, and click tracking here.
+                                Start composing and sending emails to track your outreach pipeline here.
                             </p>
                         </div>
                     )}
@@ -419,7 +431,7 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
             {activeTab === 'sent' && (
                 <div className="space-y-6 animate-in fade-in duration-300">
                     {/* Search & Filter */}
-                    <div className="flex flex-col md:flex-row gap-4">
+                    <div className="flex flex-col gap-4">
                         <div className="relative flex-1 group">
                             <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                             <input
@@ -430,37 +442,32 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
                                 className="w-full bg-white/60 backdrop-blur-md border border-secondary-200 rounded-3xl py-4 pl-14 pr-4 transition-all focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none font-bold text-slate-900 shadow-sm"
                             />
                         </div>
-                        <div className="relative">
+                        <div className="flex flex-wrap items-center gap-2">
                             <button
-                                onClick={() => setShowFilterMenu(!showFilterMenu)}
-                                className={`flex items-center justify-center gap-3 px-8 py-4 bg-white hover:bg-secondary-50 border rounded-3xl text-sm font-black uppercase tracking-widest text-slate-700 transition-all shadow-sm ${filterStatus ? 'border-primary-300 bg-primary-50' : 'border-secondary-200'}`}
+                                onClick={() => setFilterStatus(null)}
+                                className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${!filterStatus ? 'bg-slate-900 text-white border-slate-900 shadow-lg' : 'bg-white text-slate-600 border-secondary-200 hover:bg-secondary-50'}`}
                             >
-                                <Filter size={18} className="text-secondary-400" />
-                                {filterStatus ?? 'Filter'}
-                                {filterStatus && (
-                                    <X size={14} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setFilterStatus(null); setShowFilterMenu(false); }} />
-                                )}
+                                <Filter size={14} />
+                                All
                             </button>
-                            {showFilterMenu && (
-                                <div className="absolute top-full mt-2 right-0 bg-white border border-secondary-200 rounded-2xl shadow-2xl z-50 py-2 min-w-[180px]">
-                                    {statuses.map(s => (
-                                        <button
-                                            key={s}
-                                            onClick={() => { setFilterStatus(s); setShowFilterMenu(false); }}
-                                            className={`w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest hover:bg-secondary-50 transition-colors ${filterStatus === s ? 'text-primary-600 bg-primary-50' : 'text-slate-600'}`}
-                                        >
-                                            {s}
-                                        </button>
-                                    ))}
-                                    <hr className="my-1 border-secondary-100" />
+                            {filterGroups.map(g => {
+                                const count = emails.filter(e => g.statuses.includes(e.status)).length;
+                                return (
                                     <button
-                                        onClick={() => { setFilterStatus(null); setShowFilterMenu(false); }}
-                                        className="w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest text-secondary-400 hover:bg-secondary-50 transition-colors"
+                                        key={g.key}
+                                        onClick={() => setFilterStatus(filterStatus === g.key ? null : g.key)}
+                                        className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest border transition-all ${filterStatus === g.key ? 'bg-primary-600 text-white border-primary-600 shadow-lg' : 'bg-white text-slate-600 border-secondary-200 hover:bg-secondary-50'}`}
                                     >
-                                        Clear filter
+                                        {g.icon}
+                                        {g.label}
+                                        {count > 0 && (
+                                            <span className={`ml-0.5 w-5 h-5 rounded-full text-[9px] flex items-center justify-center font-black ${filterStatus === g.key ? 'bg-white/20 text-white' : 'bg-secondary-100 text-secondary-500'}`}>
+                                                {count}
+                                            </span>
+                                        )}
                                     </button>
-                                </div>
-                            )}
+                                );
+                            })}
                         </div>
                     </div>
 

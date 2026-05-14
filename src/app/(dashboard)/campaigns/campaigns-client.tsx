@@ -28,6 +28,10 @@ import {
     Factory,
     CheckCircle,
     AlertCircle,
+    Mail,
+    Send,
+    FileText,
+    Save,
 } from 'lucide-react';
 import type { Campaign } from '@/types';
 
@@ -66,6 +70,152 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
     const [loadingAvailable, setLoadingAvailable] = useState(false);
     const [addingIndustry, setAddingIndustry] = useState<string | null>(null);
     const [addResult, setAddResult] = useState<{ success: boolean; message: string } | null>(null);
+
+    // Email Campaign modal state
+    const [emailCampaign, setEmailCampaign] = useState<Campaign | null>(null);
+    const [emailSenderName, setEmailSenderName] = useState('');
+    const [emailSenderCompany, setEmailSenderCompany] = useState('');
+    const [emailFromEmail, setEmailFromEmail] = useState('');
+    const [emailContext, setEmailContext] = useState('');
+    const [emailStep, setEmailStep] = useState<'configure' | 'generating' | 'review' | 'approving' | 'sending' | 'done'>('configure');
+    const [emailGenResults, setEmailGenResults] = useState<{ success: number; errors: number; message: string } | null>(null);
+    const [emailDraftCount, setEmailDraftCount] = useState(0);
+    const [emailApprovedCount, setEmailApprovedCount] = useState(0);
+    const [emailSendResults, setEmailSendResults] = useState<{ sent: number; failed: number } | null>(null);
+
+    // Campaign Context editor state
+    const [contextCampaign, setContextCampaign] = useState<Campaign | null>(null);
+    const [contextValue, setContextValue] = useState('');
+    const [savingContext, setSavingContext] = useState(false);
+    const [contextSaved, setContextSaved] = useState(false);
+
+    const openContextEditor = (campaign: Campaign) => {
+        setContextCampaign(campaign);
+        setContextValue(campaign.context ?? '');
+        setContextSaved(false);
+    };
+
+    const handleSaveContext = async () => {
+        if (!contextCampaign) return;
+        setSavingContext(true);
+        try {
+            const res = await fetch(`/api/campaigns/${contextCampaign.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ context: contextValue || null }),
+            });
+            if (res.ok) {
+                const { campaign: updated } = await res.json();
+                setCampaigns(prev => prev.map(c => c.id === contextCampaign.id ? updated : c));
+                setContextCampaign(updated);
+                setContextSaved(true);
+                setTimeout(() => setContextSaved(false), 2000);
+            }
+        } catch {
+            // silent
+        } finally {
+            setSavingContext(false);
+        }
+    };
+
+    const openEmailCampaign = (campaign: Campaign) => {
+        setEmailCampaign(campaign);
+        setEmailSenderName('');
+        setEmailSenderCompany('');
+        setEmailFromEmail('');
+        setEmailContext(campaign.context ?? '');
+        setEmailStep('configure');
+        setEmailGenResults(null);
+        setEmailDraftCount(0);
+        setEmailApprovedCount(0);
+        setEmailSendResults(null);
+    };
+
+    const handleEmailGenerate = async () => {
+        if (!emailCampaign || !emailSenderName || !emailSenderCompany || !emailFromEmail) return;
+        setEmailStep('generating');
+        try {
+            const res = await fetch('/api/emails/generate-campaign', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    campaign_id: emailCampaign.id,
+                    sender_name: emailSenderName,
+                    sender_company: emailSenderCompany,
+                    from_email: emailFromEmail,
+                    context: emailContext || undefined,
+                }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setEmailGenResults({ success: data.success, errors: data.errors, message: data.message });
+                setEmailDraftCount(data.success);
+                setEmailStep('review');
+            } else {
+                setEmailGenResults({ success: 0, errors: 0, message: data.error ?? 'Failed to generate emails' });
+                setEmailStep('review');
+            }
+        } catch {
+            setEmailGenResults({ success: 0, errors: 0, message: 'Network error generating emails' });
+            setEmailStep('review');
+        }
+    };
+
+    const handleEmailApproveAll = async () => {
+        if (!emailCampaign) return;
+        setEmailStep('approving');
+        try {
+            const listRes = await fetch('/api/emails?status=draft');
+            if (!listRes.ok) { setEmailStep('review'); return; }
+            const { emails } = await listRes.json();
+            const campaignDrafts = emails.filter((e: { campaign_id: string | null; status: string }) => e.campaign_id === emailCampaign.id && e.status === 'draft');
+
+            if (campaignDrafts.length === 0) { setEmailStep('review'); return; }
+
+            await Promise.all(campaignDrafts.map((e: { id: string }) =>
+                fetch(`/api/emails/${e.id}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status: 'approved' }),
+                })
+            ));
+            setEmailApprovedCount(campaignDrafts.length);
+            setEmailDraftCount(0);
+            setEmailStep('review');
+        } catch {
+            setEmailStep('review');
+        }
+    };
+
+    const handleEmailSendAll = async () => {
+        if (!emailCampaign) return;
+        setEmailStep('sending');
+        try {
+            const listRes = await fetch('/api/emails?status=approved');
+            if (!listRes.ok) { setEmailStep('review'); return; }
+            const { emails } = await listRes.json();
+            const campaignApproved = emails.filter((e: { campaign_id: string | null; status: string }) => e.campaign_id === emailCampaign.id && e.status === 'approved');
+
+            if (campaignApproved.length === 0) { setEmailStep('review'); return; }
+
+            const res = await fetch('/api/emails/send-batch', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email_ids: campaignApproved.map((e: { id: string }) => e.id) }),
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setEmailSendResults({ sent: data.sent, failed: data.failed });
+                setEmailApprovedCount(0);
+                setEmailStep('done');
+            } else {
+                setEmailSendResults({ sent: 0, failed: 0 });
+                setEmailStep('review');
+            }
+        } catch {
+            setEmailStep('review');
+        }
+    };
 
     const activeCounts = campaigns.filter(c => c.status === 'active').length;
     const pausedCounts = campaigns.filter(c => c.status === 'paused').length;
@@ -446,13 +596,31 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
                                         <ArrowRight size={16} />
                                     </button>
                                 </div>
+                                <button
+                                    onClick={() => openContextEditor(campaign)}
+                                    className={`w-full py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border ${
+                                        campaign.context
+                                            ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-200/50 hover:border-emerald-300'
+                                            : 'bg-secondary-50 hover:bg-secondary-100 text-secondary-500 border-secondary-200/50 hover:border-secondary-300'
+                                    }`}
+                                >
+                                    <FileText size={14} /> {campaign.context ? 'Edit Context' : 'Add Context'}
+                                </button>
                                 {!isCompleted && (
-                                    <button
-                                        onClick={() => openAddLeads(campaign)}
-                                        className="w-full py-2.5 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-primary-200/50 hover:border-primary-300"
-                                    >
-                                        <UserPlus size={14} /> Add Leads to Campaign
-                                    </button>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => openAddLeads(campaign)}
+                                            className="flex-1 py-2.5 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-primary-200/50 hover:border-primary-300"
+                                        >
+                                            <UserPlus size={14} /> Add Leads
+                                        </button>
+                                        <button
+                                            onClick={() => openEmailCampaign(campaign)}
+                                            className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
+                                        >
+                                            <Mail size={14} /> Email All
+                                        </button>
+                                    </div>
                                 )}
                             </div>
                         </article>
@@ -523,6 +691,242 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
                                 {creating ? <Loader2 className="animate-spin" size={16} /> : <Plus size={16} />}
                                 Create
                             </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Email Campaign Modal */}
+            {emailCampaign && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setEmailCampaign(null)} />
+                    <div className="relative w-full max-w-lg card p-0 overflow-hidden animate-in slide-in-from-bottom-8 duration-500 shadow-2xl max-h-[85vh] flex flex-col">
+                        {/* Header */}
+                        <div className="bg-slate-900 p-6 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
+                                    <Mail size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-sm uppercase tracking-widest">Email Campaign</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate max-w-[250px]">{emailCampaign.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setEmailCampaign(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar flex-1">
+                            {/* Step: Configure */}
+                            {emailStep === 'configure' && (
+                                <div className="space-y-4">
+                                    <p className="text-sm text-secondary-500 font-medium">
+                                        Generate personalized AI emails for all eligible leads in this campaign, review them, then send.
+                                    </p>
+                                    <div>
+                                        <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Your Name</label>
+                                        <input type="text" value={emailSenderName} onChange={(e) => setEmailSenderName(e.target.value)} placeholder="e.g. Viktor" className="input-field" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Your Company</label>
+                                        <input type="text" value={emailSenderCompany} onChange={(e) => setEmailSenderCompany(e.target.value)} placeholder="e.g. TheOptimalFlow" className="input-field" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">From Email</label>
+                                        <input type="email" value={emailFromEmail} onChange={(e) => setEmailFromEmail(e.target.value)} placeholder="you@company.com" className="input-field" />
+                                    </div>
+                                    <div>
+                                        <label className="text-[10px] font-black text-secondary-400 uppercase tracking-widest mb-2 block">Context (optional)</label>
+                                        <textarea value={emailContext} onChange={(e) => setEmailContext(e.target.value)} placeholder="Any extra context for the AI to personalize emails..." className="input-field min-h-[80px] resize-none" />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step: Generating */}
+                            {emailStep === 'generating' && (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <Loader2 className="animate-spin text-primary-500 mb-4" size={36} />
+                                    <h4 className="text-lg font-black text-slate-900 tracking-tight">Generating Emails...</h4>
+                                    <p className="text-sm text-secondary-500 font-medium mt-2 max-w-xs">
+                                        AI is crafting personalized emails for each lead. This may take a moment.
+                                    </p>
+                                </div>
+                            )}
+
+                            {/* Step: Review */}
+                            {emailStep === 'review' && (
+                                <div className="space-y-5">
+                                    {emailGenResults && (
+                                        <div className={`p-4 rounded-xl border text-sm font-medium ${emailGenResults.success > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'}`}>
+                                            <div className="flex items-center gap-2">
+                                                {emailGenResults.success > 0 ? <CheckCircle size={16} className="text-emerald-600" /> : <AlertCircle size={16} className="text-red-600" />}
+                                                <span className="font-black text-xs uppercase tracking-widest">
+                                                    {emailGenResults.success > 0 ? 'Emails Generated' : 'Error'}
+                                                </span>
+                                            </div>
+                                            <p className="text-xs mt-1">{emailGenResults.message}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Status summary */}
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-secondary-50/50 rounded-xl p-4 text-center">
+                                            <span className="text-2xl font-black text-slate-900">{emailDraftCount}</span>
+                                            <span className="text-[10px] text-secondary-400 uppercase tracking-widest font-bold block mt-1">Drafts</span>
+                                        </div>
+                                        <div className="bg-primary-50/50 rounded-xl p-4 text-center">
+                                            <span className="text-2xl font-black text-primary-700">{emailApprovedCount}</span>
+                                            <span className="text-[10px] text-secondary-400 uppercase tracking-widest font-bold block mt-1">Approved</span>
+                                        </div>
+                                    </div>
+
+                                    <p className="text-xs text-secondary-500 font-medium">
+                                        Review the generated drafts in the Outreach page, or approve all and send directly from here.
+                                    </p>
+
+                                    {/* Action buttons */}
+                                    <div className="space-y-2">
+                                        {emailDraftCount > 0 && (
+                                            <button
+                                                onClick={handleEmailApproveAll}
+                                                className="w-full py-3 bg-primary-50 hover:bg-primary-100 text-primary-700 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 border border-primary-200/50"
+                                            >
+                                                <Check size={14} /> Approve All {emailDraftCount} Drafts
+                                            </button>
+                                        )}
+                                        {emailApprovedCount > 0 && (
+                                            <button
+                                                onClick={handleEmailSendAll}
+                                                className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg"
+                                            >
+                                                <Send size={14} /> Send {emailApprovedCount} Emails
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Step: Approving */}
+                            {emailStep === 'approving' && (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <Loader2 className="animate-spin text-primary-500 mb-4" size={36} />
+                                    <h4 className="text-lg font-black text-slate-900 tracking-tight">Approving Drafts...</h4>
+                                </div>
+                            )}
+
+                            {/* Step: Sending */}
+                            {emailStep === 'sending' && (
+                                <div className="flex flex-col items-center justify-center py-12 text-center">
+                                    <Loader2 className="animate-spin text-primary-500 mb-4" size={36} />
+                                    <h4 className="text-lg font-black text-slate-900 tracking-tight">Sending Emails...</h4>
+                                    <p className="text-sm text-secondary-500 font-medium mt-2">Delivering to all approved leads via SendGrid.</p>
+                                </div>
+                            )}
+
+                            {/* Step: Done */}
+                            {emailStep === 'done' && emailSendResults && (
+                                <div className="flex flex-col items-center justify-center py-8 text-center space-y-4">
+                                    <div className="w-16 h-16 bg-emerald-100 rounded-[2rem] flex items-center justify-center">
+                                        <CheckCircle size={32} className="text-emerald-600" />
+                                    </div>
+                                    <h4 className="text-xl font-black text-slate-900 tracking-tight">Campaign Sent</h4>
+                                    <div className="grid grid-cols-2 gap-3 w-full max-w-xs">
+                                        <div className="bg-emerald-50 rounded-xl p-4 text-center border border-emerald-200">
+                                            <span className="text-2xl font-black text-emerald-700">{emailSendResults.sent}</span>
+                                            <span className="text-[10px] text-emerald-600 uppercase tracking-widest font-bold block mt-1">Sent</span>
+                                        </div>
+                                        <div className="bg-red-50 rounded-xl p-4 text-center border border-red-200">
+                                            <span className="text-2xl font-black text-red-700">{emailSendResults.failed}</span>
+                                            <span className="text-[10px] text-red-600 uppercase tracking-widest font-bold block mt-1">Failed</span>
+                                        </div>
+                                    </div>
+                                    <p className="text-xs text-secondary-500 font-medium">Track delivery in the Outreach page.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-secondary-200/50 shrink-0 flex justify-between items-center">
+                            <button
+                                onClick={() => setEmailCampaign(null)}
+                                className="px-6 py-2.5 bg-white border border-secondary-200 rounded-xl text-xs font-black text-slate-600 hover:bg-secondary-50 transition-all uppercase tracking-widest"
+                            >
+                                {emailStep === 'done' ? 'Close' : 'Cancel'}
+                            </button>
+                            {emailStep === 'configure' && (
+                                <button
+                                    onClick={handleEmailGenerate}
+                                    disabled={!emailSenderName || !emailSenderCompany || !emailFromEmail}
+                                    className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg"
+                                >
+                                    <Sparkles size={14} /> Generate Emails
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Campaign Context Editor Modal */}
+            {contextCampaign && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-md" onClick={() => setContextCampaign(null)} />
+                    <div className="relative w-full max-w-2xl card p-0 overflow-hidden animate-in slide-in-from-bottom-8 duration-500 shadow-2xl max-h-[85vh] flex flex-col">
+                        {/* Header */}
+                        <div className="bg-slate-900 p-6 text-white flex justify-between items-center shrink-0">
+                            <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 bg-emerald-600 rounded-xl flex items-center justify-center">
+                                    <FileText size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="font-black text-sm uppercase tracking-widest">Campaign Context</h4>
+                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5 truncate max-w-[350px]">{contextCampaign.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setContextCampaign(null)} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Body */}
+                        <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                            <p className="text-sm text-secondary-500 font-medium">
+                                Add context about this campaign that the AI will use when generating outreach emails. For example: new product launches, value propositions, target pain points, or any relevant background information.
+                            </p>
+                            <div className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Campaign Briefing (Markdown supported)</div>
+                            <textarea
+                                value={contextValue}
+                                onChange={(e) => { setContextValue(e.target.value); setContextSaved(false); }}
+                                placeholder={`# Product Launch: AI Analytics Suite\n\nWe're launching a new AI-powered analytics platform that helps companies:\n- Reduce data processing time by 80%\n- Get real-time insights from multiple data sources\n- Automate reporting workflows\n\n## Key talking points\n- Early adopter pricing available\n- Free migration from competing tools\n- SOC 2 Type II certified`}
+                                className="w-full bg-secondary-50/50 border border-secondary-200 rounded-2xl py-4 px-4 text-sm text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all font-mono min-h-[300px] resize-y"
+                            />
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-4 border-t border-secondary-200/50 shrink-0 flex justify-between items-center">
+                            <button
+                                onClick={() => setContextCampaign(null)}
+                                className="px-6 py-2.5 bg-white border border-secondary-200 rounded-xl text-xs font-black text-slate-600 hover:bg-secondary-50 transition-all uppercase tracking-widest"
+                            >
+                                Close
+                            </button>
+                            <div className="flex items-center gap-3">
+                                {contextSaved && (
+                                    <span className="text-xs font-bold text-emerald-600 flex items-center gap-1 animate-in fade-in duration-300">
+                                        <CheckCircle size={14} /> Saved
+                                    </span>
+                                )}
+                                <button
+                                    onClick={handleSaveContext}
+                                    disabled={savingContext}
+                                    className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all disabled:opacity-50 flex items-center gap-2 shadow-lg"
+                                >
+                                    {savingContext ? <Loader2 className="animate-spin" size={14} /> : <Save size={14} />}
+                                    Save Context
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

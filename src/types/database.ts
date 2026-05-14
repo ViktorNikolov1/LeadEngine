@@ -8,6 +8,7 @@ export type Campaign = {
     search_criteria: Record<string, unknown> | null;
     status: 'active' | 'paused' | 'completed';
     target_leads: number | null;
+    context: string | null;
     created_at: string;
     updated_at: string;
 };

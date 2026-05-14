@@ -9,6 +9,8 @@ function ensureInitialized(): void {
             throw new Error('SENDGRID_API_KEY environment variable is not set');
         }
         sgMail.setApiKey(apiKey);
+        // Route API calls through EU servers for GDPR compliance and lower latency to European recipients
+        (sgMail as unknown as { setDataResidency: (region: string) => void }).setDataResidency('eu');
         initialized = true;
     }
 }
