@@ -3,14 +3,18 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Users, Search, Database, Settings, LogOut, ChevronRight, Menu, X, Zap, Send, Clock, Sun, Moon } from 'lucide-react';
+import { Home, Users, Search, Database, Settings, LogOut, ChevronRight, Menu, X, Zap, Send, Clock, Sun, Moon, Globe } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useTheme } from '@/components/ThemeProvider';
+import { useLanguage } from '@/components/LanguageProvider';
+import { LOCALE_LABELS, LOCALE_FLAGS, type Locale } from '@/lib/i18n';
 
 export default function Sidebar() {
     const pathname = usePathname();
     const { theme, toggle: toggleTheme } = useTheme();
+    const { locale, setLocale, t } = useLanguage();
     const [isOpen, setIsOpen] = useState(false);
+    const [showLangMenu, setShowLangMenu] = useState(false);
     const [userName, setUserName] = useState('');
     const [userInitial, setUserInitial] = useState('U');
 
@@ -82,25 +86,25 @@ export default function Sidebar() {
                     </div>
 
                     <nav className="space-y-1.5">
-                        <NavLink href="/" icon={<Home size={20} />} label="Dashboard" />
-                        <NavLink href="/search" icon={<Search size={20} />} label="Advanced Search" />
-                        <NavLink href="/campaigns" icon={<Database size={20} />} label="Campaigns" />
-                        <NavLink href="/leads" icon={<Users size={20} />} label="Lead Pipeline" />
-                        <NavLink href="/outreach" icon={<Send size={20} />} label="Email Outreach" />
-                        <NavLink href="/logs" icon={<Clock size={20} />} label="Job Logs" />
-                        <NavLink href="/settings" icon={<Settings size={20} />} label="Settings" />
+                        <NavLink href="/" icon={<Home size={20} />} label={t('sidebar.dashboard')} />
+                        <NavLink href="/search" icon={<Search size={20} />} label={t('sidebar.advancedSearch')} />
+                        <NavLink href="/campaigns" icon={<Database size={20} />} label={t('sidebar.campaigns')} />
+                        <NavLink href="/leads" icon={<Users size={20} />} label={t('sidebar.leadPipeline')} />
+                        <NavLink href="/outreach" icon={<Send size={20} />} label={t('sidebar.emailOutreach')} />
+                        <NavLink href="/logs" icon={<Clock size={20} />} label={t('sidebar.jobLogs')} />
+                        <NavLink href="/settings" icon={<Settings size={20} />} label={t('sidebar.settings')} />
                     </nav>
 
                     {/* Engine Status */}
                     <div className="mt-10 p-4 rounded-xl bg-secondary-50 dark:bg-slate-800 border border-secondary-200/60 dark:border-slate-700/60 shadow-sm relative overflow-hidden group/status">
                         <div className="absolute inset-0 bg-gradient-to-br from-white/40 dark:from-white/5 to-transparent pointer-events-none"></div>
                         <div className="flex items-center justify-between mb-3 relative">
-                            <span className="text-[10px] font-bold text-secondary-500 dark:text-slate-400 uppercase tracking-widest">Scraping Engine</span>
+                            <span className="text-[10px] font-bold text-secondary-500 dark:text-slate-400 uppercase tracking-widest">{t('sidebar.scrapingEngine')}</span>
                             <span className="flex h-2 w-2 rounded-full bg-primary-500 shadow-[0_0_8px_rgba(59,130,246,0.6)] animate-pulse"></span>
                         </div>
                         <div className="flex items-center gap-2 text-[13px] font-semibold text-slate-800 dark:text-slate-200 relative">
                             <Zap size={15} className="text-primary-500" fill="currentColor" />
-                            <span>Engine Active</span>
+                            <span>{t('sidebar.engineActive')}</span>
                         </div>
                     </div>
                 </div>
@@ -119,10 +123,41 @@ export default function Sidebar() {
                         </div>
                         <div className="flex-1 min-w-0">
                             <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-widest">
-                                {theme === 'dark' ? 'Light Mode' : 'Dark Mode'}
+                                {theme === 'dark' ? t('sidebar.lightMode') : t('sidebar.darkMode')}
                             </span>
                         </div>
                     </button>
+
+                    {/* Language Switcher */}
+                    <div className="relative mb-4">
+                        <button
+                            onClick={() => setShowLangMenu(!showLangMenu)}
+                            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-secondary-200/60 dark:border-slate-600 bg-white dark:bg-slate-800 hover:bg-secondary-50 dark:hover:bg-slate-700 transition-all text-left group"
+                        >
+                            <div className="w-9 h-9 rounded-lg bg-secondary-100 dark:bg-slate-700 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                <Globe size={18} className="text-primary-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200 uppercase tracking-widest">
+                                    {LOCALE_FLAGS[locale]} &middot; {LOCALE_LABELS[locale]}
+                                </span>
+                            </div>
+                        </button>
+                        {showLangMenu && (
+                            <div className="absolute bottom-full mb-2 left-0 right-0 bg-white dark:bg-slate-800 border border-secondary-200 dark:border-slate-600 rounded-xl shadow-2xl z-50 py-2 overflow-hidden">
+                                {(Object.keys(LOCALE_LABELS) as Locale[]).map((loc) => (
+                                    <button
+                                        key={loc}
+                                        onClick={() => { setLocale(loc); setShowLangMenu(false); }}
+                                        className={`w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest hover:bg-secondary-50 dark:hover:bg-slate-700 transition-colors flex items-center gap-3 ${locale === loc ? 'text-primary-600 bg-primary-50 dark:bg-primary-500/10' : 'text-slate-600 dark:text-slate-300'}`}
+                                    >
+                                        <span className="font-black">{LOCALE_FLAGS[loc]}</span>
+                                        {LOCALE_LABELS[loc]}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
+                    </div>
 
                     <div className="flex items-center gap-4 p-3 mb-4 rounded-xl hover:bg-white dark:hover:bg-slate-700 transition-colors cursor-pointer group shadow-sm border border-transparent hover:border-secondary-200/60 dark:hover:border-slate-600">
                         <div className="w-10 h-10 rounded-[12px] bg-white dark:bg-slate-700 border border-secondary-200 dark:border-slate-500 flex items-center justify-center text-slate-700 dark:text-white font-bold text-lg shadow-sm group-hover:shadow group-hover:-translate-y-0.5 transition-all">
@@ -137,7 +172,7 @@ export default function Sidebar() {
                         className="w-full flex items-center justify-center gap-2.5 px-4 py-3 text-secondary-500 dark:text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-all duration-300 text-[12px] font-bold uppercase tracking-wider border border-transparent hover:border-rose-100 dark:hover:border-rose-500/20"
                     >
                         <LogOut size={16} />
-                        <span>Terminate Session</span>
+                        <span>{t('sidebar.terminateSession')}</span>
                     </button>
                 </div>
             </aside>

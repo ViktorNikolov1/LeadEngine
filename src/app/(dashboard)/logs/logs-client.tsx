@@ -25,6 +25,7 @@ import {
     RotateCcw,
 } from 'lucide-react';
 import type { Run } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 
 type RunWithCampaign = Run & {
     campaign: { id: string; name: string } | null;
@@ -46,6 +47,7 @@ const PAGE_SIZE = 10;
 
 export default function LogsClient({ runs, stats }: Props) {
     const router = useRouter();
+    const { t } = useLanguage();
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string | null>(null);
     const [showStatusMenu, setShowStatusMenu] = useState(false);
@@ -71,25 +73,25 @@ export default function LogsClient({ runs, stats }: Props) {
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        System Monitoring
+                        {t('logs.systemMonitoring')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Job Logs <Activity className="text-primary-500" size={28} />
+                        {t('logs.title')} <Activity className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium">Monitor background processes, lead extractions, and execution history.</p>
+                    <p className="text-secondary-500 font-medium">{t('logs.subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.refresh()}
                         className="flex items-center gap-2 px-6 py-3 bg-white border border-secondary-200 rounded-2xl font-black text-xs uppercase tracking-widest text-slate-600 hover:bg-secondary-50 transition-all shadow-sm"
                     >
-                        <RefreshCw size={14} /> Refresh
+                        <RefreshCw size={14} /> {t('common.refresh')}
                     </button>
                     <button
                         onClick={() => router.push('/search')}
                         className="btn-primary shadow-xl"
                     >
-                        <Zap size={16} /> New Job
+                        <Zap size={16} /> {t('logs.newJob')}
                     </button>
                 </div>
             </header>
@@ -97,26 +99,26 @@ export default function LogsClient({ runs, stats }: Props) {
             {/* Stats Grid */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
-                    label="Total Jobs (24h)"
+                    label={t('logs.totalJobs24h')}
                     value={stats.total24h}
                     icon={<BarChart3 size={20} className="text-blue-500" />}
                     delay="0"
                 />
                 <StatCard
-                    label="Success Rate"
+                    label={t('logs.successRate')}
                     value={`${stats.successRate}%`}
                     icon={<CheckCircle size={20} className="text-emerald-500" />}
                     delay="100"
                 />
                 <StatCard
-                    label="Active Jobs"
+                    label={t('logs.activeJobs')}
                     value={stats.active}
                     icon={<Loader2 size={20} className="text-primary-500 animate-spin" />}
-                    subtitle="Processing"
+                    subtitle={t('logs.processing')}
                     delay="200"
                 />
                 <StatCard
-                    label="Failed Jobs"
+                    label={t('logs.failedJobs')}
                     value={stats.failed}
                     icon={<AlertTriangle size={20} className="text-red-400" />}
                     delay="300"
@@ -129,7 +131,7 @@ export default function LogsClient({ runs, stats }: Props) {
                     <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-secondary-400 group-focus-within:text-primary-500 transition-colors" size={18} />
                     <input
                         type="text"
-                        placeholder="Search logs..."
+                        placeholder={t('logs.searchLogs')}
                         value={searchQuery}
                         onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }}
                         className="w-full bg-white border border-secondary-200 rounded-2xl py-3 pl-11 pr-4 text-sm font-bold text-slate-900 placeholder:text-secondary-300 outline-none focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 transition-all shadow-sm"
@@ -142,7 +144,7 @@ export default function LogsClient({ runs, stats }: Props) {
                         className={`flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-black uppercase tracking-widest transition-all shadow-sm ${statusFilter ? 'bg-primary-50 border-primary-300 text-primary-700' : 'bg-white border-secondary-200 text-slate-600 hover:bg-secondary-50'} border`}
                     >
                         <Filter size={14} />
-                        {statusFilter ?? 'All Statuses'}
+                        {statusFilter ?? t('logs.allStatuses')}
                         {statusFilter && (
                             <X size={12} className="text-secondary-400 hover:text-red-500" onClick={(e) => { e.stopPropagation(); setStatusFilter(null); setShowStatusMenu(false); setPage(0); }} />
                         )}
@@ -163,7 +165,7 @@ export default function LogsClient({ runs, stats }: Props) {
                                 onClick={() => { setStatusFilter(null); setShowStatusMenu(false); setPage(0); }}
                                 className="w-full px-4 py-2.5 text-left text-xs font-bold uppercase tracking-widest text-secondary-400 hover:bg-secondary-50 transition-colors"
                             >
-                                Clear
+                                {t('common.clear')}
                             </button>
                         </div>
                     )}
@@ -203,9 +205,9 @@ export default function LogsClient({ runs, stats }: Props) {
                             <div className="w-20 h-20 bg-secondary-100 rounded-[2rem] flex items-center justify-center mb-6">
                                 <Activity size={36} className="text-secondary-400" />
                             </div>
-                            <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">No jobs found</h3>
+                            <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-tighter">{t('logs.noJobsFound')}</h3>
                             <p className="text-secondary-500 max-w-md font-medium">
-                                {searchQuery || statusFilter ? 'Try adjusting your filters.' : 'Run a search to create your first job.'}
+                                {searchQuery || statusFilter ? t('logs.adjustFilters') : t('logs.noJobsDesc')}
                             </p>
                         </div>
                     ) : (

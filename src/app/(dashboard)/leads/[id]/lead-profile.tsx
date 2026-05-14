@@ -25,6 +25,7 @@ import {
     Trash2,
 } from 'lucide-react';
 import type { Lead } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 
 type LeadEmail = {
     id: string;
@@ -42,6 +43,7 @@ type LeadProfileProps = {
 
 export default function LeadProfile({ lead: initialLead, emails }: LeadProfileProps) {
     const router = useRouter();
+    const { t } = useLanguage();
     const [lead, setLead] = useState(initialLead);
     const [copiedEmail, setCopiedEmail] = useState(false);
     const [copiedLinkedin, setCopiedLinkedin] = useState(false);
@@ -107,7 +109,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     onClick={() => router.push('/leads')}
                     className="flex items-center gap-2 text-secondary-400 hover:text-primary-600 transition-colors font-bold"
                 >
-                    <ArrowLeft size={16} /> Leads
+                    <ArrowLeft size={16} /> {t('leadProfile.leads')}
                 </button>
                 <ChevronRight size={14} className="text-secondary-300" />
                 <span className="text-slate-900 font-black">{displayName}</span>
@@ -168,7 +170,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                                 onClick={() => router.push(`/outreach?lead_id=${lead.id}`)}
                                 className="btn-primary shadow-xl"
                             >
-                                <Send size={16} /> Send Email
+                                <Send size={16} /> {t('leadProfile.sendEmail')}
                             </button>
                         )}
                     </div>
@@ -183,7 +185,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {(lead.headline || Boolean(enrichment?.summary) || Boolean(enrichment?.about)) && (
                         <div className="card p-8 space-y-4">
                             <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                                <FileText size={16} className="text-primary-500" /> About
+                                <FileText size={16} className="text-primary-500" /> {t('leadProfile.about')}
                             </h2>
                             <p className="text-sm text-secondary-600 leading-relaxed font-medium">
                                 {String(enrichment?.summary ?? enrichment?.about ?? lead.headline ?? '—')}
@@ -195,7 +197,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {enrichment && Object.keys(enrichment).length > 0 && (
                         <div className="card p-8 space-y-4">
                             <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                                <Tag size={16} className="text-purple-500" /> Enrichment Data
+                                <Tag size={16} className="text-purple-500" /> {t('leadProfile.enrichmentData')}
                             </h2>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                 {Object.entries(enrichment)
@@ -217,10 +219,10 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {/* Activity / Email History */}
                     <div className="card p-8 space-y-4">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Activity size={16} className="text-emerald-500" /> Activity
+                            <Activity size={16} className="text-emerald-500" /> {t('leadProfile.activity')}
                         </h2>
                         {emails.length === 0 ? (
-                            <p className="text-sm text-secondary-400 font-medium">No outreach activity yet.</p>
+                            <p className="text-sm text-secondary-400 font-medium">{t('leadProfile.noActivity')}</p>
                         ) : (
                             <div className="space-y-3">
                                 {emails.map(email => (
@@ -248,12 +250,12 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {/* Notes */}
                     <div className="card p-8 space-y-4">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <FileText size={16} className="text-amber-500" /> Notes
+                            <FileText size={16} className="text-amber-500" /> {t('leadProfile.notes')}
                         </h2>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Add notes about this lead..."
+                            placeholder={t('leadProfile.notesPlaceholder')}
                             rows={4}
                             className="input-field resize-none"
                         />
@@ -265,34 +267,34 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {/* Traceability */}
                     <div className="card p-8 space-y-5">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Shield size={16} className="text-blue-500" /> Traceability
+                            <Shield size={16} className="text-blue-500" /> {t('leadProfile.traceability')}
                         </h2>
                         <div className="space-y-4">
-                            <TraceRow label="Status">
+                            <TraceRow label={t('common.status')}>
                                 <StageBadge stage={lead.status} />
                             </TraceRow>
-                            <TraceRow label="Captured">
+                            <TraceRow label={t('leadProfile.captured')}>
                                 <span className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                     <Calendar size={14} className="text-secondary-400" />
                                     {new Date(lead.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
                                 </span>
                             </TraceRow>
-                            <TraceRow label="Last Updated">
+                            <TraceRow label={t('leadProfile.lastUpdated')}>
                                 <span className="text-sm font-bold text-slate-900 flex items-center gap-2">
                                     <Clock size={14} className="text-secondary-400" />
                                     {formatRelativeTime(lead.updated_at)}
                                 </span>
                             </TraceRow>
-                            <TraceRow label="Source">
-                                <span className="text-sm font-bold text-slate-900">{lead.source ?? 'Unknown'}</span>
+                            <TraceRow label={t('leadProfile.source')}>
+                                <span className="text-sm font-bold text-slate-900">{lead.source ?? t('common.unknown')}</span>
                             </TraceRow>
                             {lead.campaign_id && (
-                                <TraceRow label="Campaign">
+                                <TraceRow label={t('leads.campaign')}>
                                     <button
                                         onClick={() => router.push('/campaigns')}
                                         className="text-sm font-bold text-primary-600 hover:underline flex items-center gap-1"
                                     >
-                                        View <ExternalLink size={12} />
+                                        {t('leadProfile.view')} <ExternalLink size={12} />
                                     </button>
                                 </TraceRow>
                             )}
@@ -302,13 +304,13 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {/* Contact Info */}
                     <div className="card p-8 space-y-5">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Mail size={16} className="text-primary-500" /> Contact Info
+                            <Mail size={16} className="text-primary-500" /> {t('leadProfile.contactInfo')}
                         </h2>
                         <div className="space-y-4">
                             {lead.email && (
                                 <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-secondary-50/50 border border-secondary-100">
                                     <div className="min-w-0">
-                                        <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block mb-0.5">Email</span>
+                                        <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block mb-0.5">{t('common.email')}</span>
                                         <span className="text-sm font-bold text-slate-900 truncate block">{lead.email}</span>
                                     </div>
                                     <button
@@ -337,7 +339,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                             )}
                             {lead.company_domain && (
                                 <div className="p-3 rounded-xl bg-secondary-50/50 border border-secondary-100">
-                                    <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block mb-0.5">Company Domain</span>
+                                    <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block mb-0.5">{t('leadProfile.companyDomain')}</span>
                                     <a
                                         href={`https://${lead.company_domain}`}
                                         target="_blank"
@@ -349,7 +351,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                                 </div>
                             )}
                             {!lead.email && !lead.linkedin_url && (
-                                <p className="text-sm text-secondary-400 font-medium">No contact info available.</p>
+                                <p className="text-sm text-secondary-400 font-medium">{t('leadProfile.noContactInfo')}</p>
                             )}
                         </div>
                     </div>
@@ -357,10 +359,10 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                     {/* Status Change */}
                     <div className="card p-8 space-y-5">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Briefcase size={16} className="text-amber-500" /> Actions
+                            <Briefcase size={16} className="text-amber-500" /> {t('common.actions')}
                         </h2>
                         <div className="space-y-3">
-                            <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block">Change Status</span>
+                            <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest block">{t('leadProfile.changeStatus')}</span>
                             <div className="flex flex-wrap gap-2">
                                 {statuses.map(s => (
                                     <button
@@ -383,7 +385,7 @@ export default function LeadProfile({ lead: initialLead, emails }: LeadProfilePr
                             className="w-full py-3 bg-white border border-red-200 rounded-2xl text-xs font-black uppercase tracking-widest text-red-600 hover:bg-red-50 transition-all flex items-center justify-center gap-2"
                         >
                             {deleting ? <Loader2 className="animate-spin" size={14} /> : <Trash2 size={14} />}
-                            Delete Lead
+                            {t('leadProfile.deleteLead')}
                         </button>
                     </div>
                 </div>

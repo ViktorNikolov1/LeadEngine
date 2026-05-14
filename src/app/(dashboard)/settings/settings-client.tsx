@@ -3,8 +3,10 @@
 import { useState } from 'react';
 import { Save, User, Bell, Mail, Shield, AlertCircle, Loader2, Check } from "lucide-react";
 import { createClient } from '@/lib/supabase/client';
+import { useLanguage } from '@/components/LanguageProvider';
 
 export default function SettingsClient({ displayName, email, userId }: { displayName: string; email: string; userId: string }) {
+    const { t } = useLanguage();
     const [name, setName] = useState(displayName);
     const [saving, setSaving] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -23,13 +25,13 @@ export default function SettingsClient({ displayName, email, userId }: { display
             });
             if (!res.ok) {
                 const data = await res.json();
-                setError(data.error ?? 'Failed to save');
+                setError(data.error ?? t('settings.failedSave'));
             } else {
                 setSaved(true);
                 setTimeout(() => setSaved(false), 3000);
             }
         } catch {
-            setError('Failed to save profile');
+            setError(t('settings.failedSaveProfile'));
         } finally {
             setSaving(false);
         }
@@ -50,7 +52,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
                 setTimeout(() => setResetSent(false), 5000);
             }
         } catch {
-            setError('Failed to send reset email');
+            setError(t('settings.failedSendReset'));
         } finally {
             setResetSending(false);
         }
@@ -59,8 +61,8 @@ export default function SettingsClient({ displayName, email, userId }: { display
     return (
         <div className="max-w-3xl space-y-8 mx-auto animate-in fade-in duration-700">
             <header className="pb-4 border-b border-secondary-200">
-                <h2 className="text-2xl font-bold text-slate-900 mb-1">Account Settings</h2>
-                <p className="text-secondary-500">Manage your profile, security, and preferences</p>
+                <h2 className="text-2xl font-bold text-slate-900 mb-1">{t('settings.title')}</h2>
+                <p className="text-secondary-500">{t('settings.subtitle')}</p>
             </header>
 
             {error && (
@@ -76,15 +78,15 @@ export default function SettingsClient({ displayName, email, userId }: { display
                         <User size={24} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900">Profile Information</h3>
-                        <p className="text-sm text-secondary-500">Update your personal details</p>
+                        <h3 className="text-xl font-bold text-slate-900">{t('settings.profileInfo')}</h3>
+                        <p className="text-sm text-secondary-500">{t('settings.updateDetails')}</p>
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="group">
                         <label className="text-sm font-medium text-slate-700 mb-2 block group-focus-within:text-primary-600 transition-colors">
-                            Full Name
+                            {t('settings.fullName')}
                         </label>
                         <input
                             type="text"
@@ -96,7 +98,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
 
                     <div className="group">
                         <label className="text-sm font-medium text-slate-700 mb-2 block group-focus-within:text-primary-600 transition-colors">
-                            Email Address
+                            {t('settings.emailAddress')}
                         </label>
                         <input
                             type="email"
@@ -114,7 +116,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
                         className="flex items-center gap-2 px-6 py-2.5 btn-primary rounded-lg font-semibold hover:-translate-y-0.5 active:translate-y-0 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {saving ? <Loader2 className="animate-spin" size={16} /> : saved ? <Check size={16} /> : <Save size={16} />}
-                        {saved ? 'Saved' : 'Save Profile'}
+                        {saved ? t('settings.saved') : t('settings.saveProfile')}
                     </button>
                 </div>
             </div>
@@ -126,17 +128,17 @@ export default function SettingsClient({ displayName, email, userId }: { display
                         <Shield size={24} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900">Security & Authentication</h3>
-                        <p className="text-sm text-secondary-500">Manage your password securely</p>
+                        <h3 className="text-xl font-bold text-slate-900">{t('settings.security')}</h3>
+                        <p className="text-sm text-secondary-500">{t('settings.securitySubtitle')}</p>
                     </div>
                 </div>
 
                 <div className="bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex items-start gap-3">
                     <AlertCircle className="text-blue-600 shrink-0 mt-0.5" size={18} />
                     <div className="text-sm text-blue-900">
-                        <p className="font-semibold mb-1">Secure Password Change</p>
+                        <p className="font-semibold mb-1">{t('settings.securePasswordChange')}</p>
                         <p className="text-blue-700 leading-relaxed">
-                            Verification required. Click below to send a reset link to your email.
+                            {t('settings.securePasswordDesc')}
                         </p>
                     </div>
                 </div>
@@ -147,7 +149,7 @@ export default function SettingsClient({ displayName, email, userId }: { display
                     className="flex items-center gap-2 px-6 py-2.5 bg-white border border-secondary-200 text-slate-700 font-medium rounded-lg hover:bg-secondary-50 hover:text-slate-900 transition-all shadow-sm disabled:opacity-50"
                 >
                     {resetSending ? <Loader2 className="animate-spin" size={16} /> : resetSent ? <Check size={16} className="text-green-600" /> : <Mail size={16} />}
-                    {resetSent ? 'Reset Email Sent' : 'Send Password Reset Email'}
+                    {resetSent ? t('settings.resetEmailSent') : t('settings.sendPasswordReset')}
                 </button>
             </div>
 
@@ -158,18 +160,18 @@ export default function SettingsClient({ displayName, email, userId }: { display
                         <Bell size={24} />
                     </div>
                     <div>
-                        <h3 className="text-xl font-bold text-slate-900">Notifications</h3>
-                        <p className="text-sm text-secondary-500">Choose what you want to be notified about</p>
+                        <h3 className="text-xl font-bold text-slate-900">{t('settings.notifications')}</h3>
+                        <p className="text-sm text-secondary-500">{t('settings.notificationsSubtitle')}</p>
                     </div>
                 </div>
 
                 <div className="space-y-4 text-sm font-medium">
                     <div className="flex items-center justify-between p-4 bg-secondary-50 rounded-lg border border-secondary-100">
-                        <span>Campaign Updates</span>
+                        <span>{t('settings.campaignUpdates')}</span>
                         <input type="checkbox" defaultChecked />
                     </div>
                     <div className="flex items-center justify-between p-4 bg-secondary-50 rounded-lg border border-secondary-100">
-                        <span>Lead Alerts</span>
+                        <span>{t('settings.leadAlerts')}</span>
                         <input type="checkbox" defaultChecked />
                     </div>
                 </div>

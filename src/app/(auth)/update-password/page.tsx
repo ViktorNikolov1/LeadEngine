@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2, Lock } from 'lucide-react';
+import { useLanguage } from '@/components/LanguageProvider';
 import DotGrid from '@/components/ui/DotGrid';
 
 export default function UpdatePasswordPage() {
     const router = useRouter();
+    const { t } = useLanguage();
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [error, setError] = useState('');
@@ -19,12 +21,12 @@ export default function UpdatePasswordPage() {
         setError('');
 
         if (password.length < 8) {
-            setError('Password must be at least 8 characters');
+            setError(t('auth.passwordMinLength'));
             return;
         }
 
         if (password !== confirmPassword) {
-            setError('Passwords do not match');
+            setError(t('auth.passwordsNoMatch'));
             return;
         }
 
@@ -65,13 +67,13 @@ export default function UpdatePasswordPage() {
                     <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-700 rounded-[14px] flex items-center justify-center text-white shadow-lg shadow-primary-600/30 mx-auto mb-4">
                         <Lock size={24} />
                     </div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Set New Password</h1>
-                    <p className="text-secondary-500 text-sm mt-1">Enter your new password below</p>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t('auth.setNewPassword')}</h1>
+                    <p className="text-secondary-500 text-sm mt-1">{t('auth.enterNewPassword')}</p>
                 </div>
 
                 {success ? (
                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-sm text-green-700 font-medium text-center">
-                        Password updated successfully. Redirecting...
+                        {t('auth.passwordUpdated')}
                     </div>
                 ) : (
                     <form onSubmit={handleUpdatePassword} className="space-y-4">
@@ -81,7 +83,7 @@ export default function UpdatePasswordPage() {
                             </div>
                         )}
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">New Password</label>
+                            <label className="text-sm font-medium text-slate-700 mb-2 block">{t('auth.newPassword')}</label>
                             <input
                                 type="password"
                                 placeholder="••••••••"
@@ -93,7 +95,7 @@ export default function UpdatePasswordPage() {
                             />
                         </div>
                         <div>
-                            <label className="text-sm font-medium text-slate-700 mb-2 block">Confirm Password</label>
+                            <label className="text-sm font-medium text-slate-700 mb-2 block">{t('auth.confirmPassword')}</label>
                             <input
                                 type="password"
                                 placeholder="••••••••"
@@ -105,7 +107,7 @@ export default function UpdatePasswordPage() {
                             />
                         </div>
                         <button type="submit" disabled={loading} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
-                            {loading ? <Loader2 className="animate-spin" size={18} /> : 'Update Password'}
+                            {loading ? <Loader2 className="animate-spin" size={18} /> : t('auth.updatePassword')}
                         </button>
                     </form>
                 )}

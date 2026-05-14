@@ -39,6 +39,7 @@ import {
     MinusSquare,
 } from 'lucide-react';
 import type { Lead } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 
 // --- Option data for select fields ---
 
@@ -200,6 +201,7 @@ const FUNDING_OPTIONS = [
 
 export default function SearchPage() {
     const router = useRouter();
+    const { t } = useLanguage();
     const [isSearching, setIsSearching] = useState(false);
     const [results, setResults] = useState<Lead[]>([]);
     const [hasSearched, setHasSearched] = useState(false);
@@ -634,12 +636,12 @@ export default function SearchPage() {
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        Prospecting Engine
+                        {t('search.prospectDiscovery')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Advanced Search <Sparkles className="text-primary-500" size={28} />
+                        {t('search.title')} <Sparkles className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium">Search your database or find new prospects via Apify.</p>
+                    <p className="text-secondary-500 font-medium">{t('search.subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button

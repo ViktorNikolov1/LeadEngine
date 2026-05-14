@@ -34,6 +34,7 @@ import {
     Save,
 } from 'lucide-react';
 import type { Campaign } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 
 type LeadCounts = Record<string, { total: number; byStatus: Record<string, number>; industries: Record<string, number> }>;
 
@@ -54,6 +55,7 @@ function getCampaignIcon(index: number) {
 
 export default function CampaignsClient({ campaigns: initial, leadCounts }: { campaigns: Campaign[]; leadCounts: LeadCounts }) {
     const router = useRouter();
+    const { t } = useLanguage();
     const [campaigns, setCampaigns] = useState(initial);
     const [showCreate, setShowCreate] = useState(false);
     const [newName, setNewName] = useState('');
@@ -380,12 +382,12 @@ export default function CampaignsClient({ campaigns: initial, leadCounts }: { ca
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        Campaign Management
+                        {t('campaigns.campaignManagement')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Campaigns <Sparkles className="text-primary-500" size={28} />
+                        {t('campaigns.title')} <Sparkles className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium">Manage your active extractions and track lead generation progress.</p>
+                    <p className="text-secondary-500 font-medium">{t('campaigns.subtitle')}</p>
                 </div>
                 <button
                     onClick={() => setShowCreate(true)}

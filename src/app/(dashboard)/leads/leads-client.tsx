@@ -26,11 +26,13 @@ import {
     MinusSquare,
 } from 'lucide-react';
 import type { Lead, Campaign } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 
 type LeadStats = Record<string, number>;
 
 export default function LeadsClient({ leads: initialLeads, stats, campaigns }: { leads: Lead[]; stats: LeadStats; campaigns: Campaign[] }) {
     const router = useRouter();
+    const { t } = useLanguage();
     const [leads, setLeads] = useState(initialLeads);
     const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
     const [showPreview, setShowPreview] = useState(false);
@@ -324,12 +326,12 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        Pipeline Management
+                        {t('leads.leadManagement')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Lead Maturation <Target className="text-primary-500" size={28} />
+                        {t('leads.title')} <Target className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium whitespace-pre-wrap">Convert and nurture high-intent prospects through your custom sales funnel.</p>
+                    <p className="text-secondary-500 font-medium whitespace-pre-wrap">{t('leads.subtitle')}</p>
                 </div>
                 <div className="flex shrink-0 gap-3">
                     <button
@@ -338,7 +340,7 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                         className="flex-1 md:flex-none px-6 py-3 bg-white border border-secondary-200 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-secondary-50 transition-all shadow-sm disabled:opacity-50 flex items-center gap-2"
                     >
                         {exporting ? <Loader2 className="animate-spin" size={14} /> : <Download size={14} />}
-                        Export CRM
+                        {t('leads.exportCsv')}
                     </button>
                     <button
                         onClick={() => router.push('/search')}
@@ -351,11 +353,11 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
 
             {/* Pipeline Overview Stats */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-6">
-                <PipelineStat label="New" count={stats.new ?? 0} color="bg-blue-500" delay="0" />
-                <PipelineStat label="Enriched" count={stats.enriched ?? 0} color="bg-slate-400" delay="100" />
-                <PipelineStat label="Contacted" count={stats.contacted ?? 0} color="bg-amber-500" delay="200" />
-                <PipelineStat label="Replied" count={stats.replied ?? 0} color="bg-purple-500" delay="300" />
-                <PipelineStat label="Disqualified" count={stats.disqualified ?? 0} color="bg-emerald-500" delay="400" />
+                <PipelineStat label={t('status.new')} count={stats.new ?? 0} color="bg-blue-500" delay="0" />
+                <PipelineStat label={t('status.enriched')} count={stats.enriched ?? 0} color="bg-slate-400" delay="100" />
+                <PipelineStat label={t('status.contacted')} count={stats.contacted ?? 0} color="bg-amber-500" delay="200" />
+                <PipelineStat label={t('status.replied')} count={stats.replied ?? 0} color="bg-purple-500" delay="300" />
+                <PipelineStat label={t('status.disqualified')} count={stats.disqualified ?? 0} color="bg-emerald-500" delay="400" />
             </div>
 
             <div className="flex flex-col md:flex-row gap-4">
@@ -363,7 +365,7 @@ export default function LeadsClient({ leads: initialLeads, stats, campaigns }: {
                     <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-secondary-400 group-focus-within:text-primary-500 transition-colors" size={20} />
                     <input
                         type="text"
-                        placeholder="Search lead pipeline..."
+                        placeholder={t('leads.searchPlaceholder')}
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full bg-white/60 backdrop-blur-md border border-secondary-200 rounded-3xl py-4 pl-14 pr-4 transition-all focus:ring-4 focus:ring-primary-500/10 focus:border-primary-500 outline-none font-bold text-slate-900 shadow-sm"

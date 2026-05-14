@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import DOMPurify from 'dompurify';
 import type { EmailStats, EmailWithLead, Lead } from '@/types';
+import { useLanguage } from '@/components/LanguageProvider';
 import {
     Send,
     Mail,
@@ -49,6 +50,7 @@ type BatchResult = {
 };
 
 export default function OutreachClient({ initialEmails, initialStats, leads, campaigns, emailConfigured, aiConfigured }: OutreachClientProps) {
+    const { t } = useLanguage();
     const [activeTab, setActiveTab] = useState<ActiveTab>('tracking');
     const [emails, setEmails] = useState<EmailWithLead[]>(initialEmails);
     const [stats, setStats] = useState<EmailStats>(initialStats);
@@ -351,12 +353,12 @@ export default function OutreachClient({ initialEmails, initialStats, leads, cam
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        Outreach Center
+                        {t('outreach.title')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Email Outreach <Send className="text-primary-500" size={28} />
+                        {t('outreach.title')} <Send className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium">Send, track, and manage email outreach to your leads.</p>
+                    <p className="text-secondary-500 font-medium">{t('outreach.subtitle')}</p>
                 </div>
                 <div className="flex shrink-0 gap-3">
                     <button

@@ -1,6 +1,8 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useLanguage } from '@/components/LanguageProvider';
+import type { TranslationKey } from '@/lib/i18n';
 import {
     Users,
     Mail,
@@ -33,6 +35,7 @@ type DashboardProps = {
 
 export default function DashboardClient({ leadStats, recentLeads, totalLeads, emailStats, totalCampaigns }: DashboardProps) {
     const router = useRouter();
+    const { t } = useLanguage();
 
     const totalPipeline = Object.values(leadStats).reduce((a, b) => a + b, 0);
     const repliedRate = totalPipeline > 0 ? Math.round(((leadStats.replied ?? 0) / totalPipeline) * 100) : 0;
@@ -44,19 +47,19 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
             <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-secondary-200/60">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-primary-600 font-black text-[10px] uppercase tracking-[0.3em]">
-                        Command Center
+                        {t('dashboard.commandCenter')}
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tighter flex items-center gap-3">
-                        Dashboard <Sparkles className="text-primary-500" size={28} />
+                        {t('dashboard.title')} <Sparkles className="text-primary-500" size={28} />
                     </h1>
-                    <p className="text-secondary-500 font-medium">Overview of your lead generation engine.</p>
+                    <p className="text-secondary-500 font-medium">{t('dashboard.subtitle')}</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button
                         onClick={() => router.push('/search')}
                         className="btn-primary shadow-xl"
                     >
-                        <Search size={16} /> Find Prospects
+                        <Search size={16} /> {t('dashboard.findProspects')}
                     </button>
                 </div>
             </header>
@@ -64,7 +67,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
             {/* Top-level KPIs */}
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
                 <KpiCard
-                    label="Total Leads"
+                    label={t('dashboard.totalLeads')}
                     value={totalLeads}
                     icon={<Users size={20} className="text-blue-500" />}
                     color="from-blue-500/10 to-blue-500/5"
@@ -72,7 +75,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                     onClick={() => router.push('/leads')}
                 />
                 <KpiCard
-                    label="Campaigns"
+                    label={t('dashboard.campaigns')}
                     value={totalCampaigns}
                     icon={<Database size={20} className="text-purple-500" />}
                     color="from-purple-500/10 to-purple-500/5"
@@ -80,7 +83,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                     onClick={() => router.push('/campaigns')}
                 />
                 <KpiCard
-                    label="Emails Sent"
+                    label={t('dashboard.emailsSent')}
                     value={emailStats.sent}
                     icon={<Send size={20} className="text-emerald-500" />}
                     color="from-emerald-500/10 to-emerald-500/5"
@@ -88,7 +91,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                     onClick={() => router.push('/outreach')}
                 />
                 <KpiCard
-                    label="Reply Rate"
+                    label={t('dashboard.replyRate')}
                     value={`${repliedRate}%`}
                     icon={<TrendingUp size={20} className="text-amber-500" />}
                     color="from-amber-500/10 to-amber-500/5"
@@ -99,13 +102,13 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
             {/* Pipeline Conversion Funnel */}
             <div className="w-full">
                 <FunnelChart 
-                    title="Pipeline Conversion Funnel" 
-                    description="Visualize how leads convert through each stage of your outreach process."
+                    title={t('dashboard.pipelineFunnel')}
+                    description={t('dashboard.funnelDescription')}
                     data={[
-                        { id: 'new', label: 'New Leads', value: leadStats.new ?? 0, colorClass: 'bg-blue-500 text-white' },
-                        { id: 'enriched', label: 'Enriched', value: leadStats.enriched ?? 0, colorClass: 'bg-slate-500 text-white' },
-                        { id: 'contacted', label: 'Contacted', value: leadStats.contacted ?? 0, colorClass: 'bg-amber-500 text-white' },
-                        { id: 'replied', label: 'Replied', value: leadStats.replied ?? 0, colorClass: 'bg-purple-500 text-white' },
+                        { id: 'new', label: t('funnel.newLeads'), value: leadStats.new ?? 0, colorClass: 'bg-blue-500 text-white' },
+                        { id: 'enriched', label: t('funnel.enriched'), value: leadStats.enriched ?? 0, colorClass: 'bg-slate-500 text-white' },
+                        { id: 'contacted', label: t('funnel.contacted'), value: leadStats.contacted ?? 0, colorClass: 'bg-amber-500 text-white' },
+                        { id: 'replied', label: t('funnel.replied'), value: leadStats.replied ?? 0, colorClass: 'bg-purple-500 text-white' },
                     ]}
                 />
             </div>
@@ -115,21 +118,21 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                 <div className="lg:col-span-1 card p-8 space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Target size={16} className="text-primary-500" /> Pipeline
+                            <Target size={16} className="text-primary-500" /> {t('dashboard.pipeline')}
                         </h2>
                         <button
                             onClick={() => router.push('/leads')}
                             className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-700 flex items-center gap-1"
                         >
-                            View All <ArrowRight size={12} />
+                            {t('common.viewAll')} <ArrowRight size={12} />
                         </button>
                     </div>
                     <div className="space-y-4">
-                        <PipelineRow label="New" count={leadStats.new ?? 0} total={totalPipeline} color="bg-blue-500" />
-                        <PipelineRow label="Enriched" count={leadStats.enriched ?? 0} total={totalPipeline} color="bg-slate-400" />
-                        <PipelineRow label="Contacted" count={leadStats.contacted ?? 0} total={totalPipeline} color="bg-amber-500" />
-                        <PipelineRow label="Replied" count={leadStats.replied ?? 0} total={totalPipeline} color="bg-purple-500" />
-                        <PipelineRow label="Disqualified" count={leadStats.disqualified ?? 0} total={totalPipeline} color="bg-red-400" />
+                        <PipelineRow label={t('status.new')} count={leadStats.new ?? 0} total={totalPipeline} color="bg-blue-500" />
+                        <PipelineRow label={t('status.enriched')} count={leadStats.enriched ?? 0} total={totalPipeline} color="bg-slate-400" />
+                        <PipelineRow label={t('status.contacted')} count={leadStats.contacted ?? 0} total={totalPipeline} color="bg-amber-500" />
+                        <PipelineRow label={t('status.replied')} count={leadStats.replied ?? 0} total={totalPipeline} color="bg-purple-500" />
+                        <PipelineRow label={t('status.disqualified')} count={leadStats.disqualified ?? 0} total={totalPipeline} color="bg-red-400" />
                     </div>
                 </div>
 
@@ -137,26 +140,26 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                 <div className="lg:col-span-1 card p-8 space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <Mail size={16} className="text-emerald-500" /> Outreach
+                            <Mail size={16} className="text-emerald-500" /> {t('dashboard.outreach')}
                         </h2>
                         <button
                             onClick={() => router.push('/outreach')}
                             className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-700 flex items-center gap-1"
                         >
-                            View All <ArrowRight size={12} />
+                            {t('common.viewAll')} <ArrowRight size={12} />
                         </button>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <StatBlock label="Total" value={emailStats.total} />
-                        <StatBlock label="Drafts" value={emailStats.drafts} />
-                        <StatBlock label="Sent" value={emailStats.sent} />
-                        <StatBlock label="Delivered" value={emailStats.delivered} />
-                        <StatBlock label="Opened" value={emailStats.opened} highlight />
-                        <StatBlock label="Clicked" value={emailStats.clicked} highlight />
+                        <StatBlock label={t('email.total')} value={emailStats.total} />
+                        <StatBlock label={t('email.drafts')} value={emailStats.drafts} />
+                        <StatBlock label={t('email.sent')} value={emailStats.sent} />
+                        <StatBlock label={t('email.delivered')} value={emailStats.delivered} />
+                        <StatBlock label={t('email.opened')} value={emailStats.opened} highlight />
+                        <StatBlock label={t('email.clicked')} value={emailStats.clicked} highlight />
                     </div>
                     {emailStats.sent > 0 && (
                         <div className="pt-4 border-t border-secondary-100 flex items-center justify-between">
-                            <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">Open Rate</span>
+                            <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">{t('dashboard.openRate')}</span>
                             <span className="text-lg font-black text-slate-900">{openRate}%</span>
                         </div>
                     )}
@@ -165,30 +168,30 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                 {/* Quick Actions */}
                 <div className="lg:col-span-1 card p-8 space-y-6">
                     <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                        <Zap size={16} className="text-amber-500" /> Quick Actions
+                        <Zap size={16} className="text-amber-500" /> {t('dashboard.quickActions')}
                     </h2>
                     <div className="space-y-3">
                         <QuickAction
-                            label="Find New Prospects"
-                            description="Search for leads using Apify filters"
+                            label={t('quickAction.findProspects')}
+                            description={t('quickAction.findProspectsDesc')}
                             icon={<Search size={18} className="text-primary-600" />}
                             onClick={() => router.push('/search')}
                         />
                         <QuickAction
-                            label="View Lead Pipeline"
-                            description="Manage and nurture your leads"
+                            label={t('quickAction.viewPipeline')}
+                            description={t('quickAction.viewPipelineDesc')}
                             icon={<Users size={18} className="text-blue-600" />}
                             onClick={() => router.push('/leads')}
                         />
                         <QuickAction
-                            label="Create Campaign"
-                            description="Organize leads into campaigns"
+                            label={t('quickAction.createCampaign')}
+                            description={t('quickAction.createCampaignDesc')}
                             icon={<Database size={18} className="text-purple-600" />}
                             onClick={() => router.push('/campaigns')}
                         />
                         <QuickAction
-                            label="Email Outreach"
-                            description="Draft and send personalized emails"
+                            label={t('quickAction.emailOutreach')}
+                            description={t('quickAction.emailOutreachDesc')}
                             icon={<Send size={18} className="text-emerald-600" />}
                             onClick={() => router.push('/outreach')}
                         />
@@ -201,24 +204,24 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                 <div className="card p-8 space-y-6">
                     <div className="flex items-center justify-between">
                         <h2 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                            <BarChart3 size={16} className="text-blue-500" /> Recent Leads
+                            <BarChart3 size={16} className="text-blue-500" /> {t('dashboard.recentLeads')}
                         </h2>
                         <button
                             onClick={() => router.push('/leads')}
                             className="text-[10px] font-black text-primary-600 uppercase tracking-widest hover:text-primary-700 flex items-center gap-1"
                         >
-                            View Pipeline <ArrowRight size={12} />
+                            {t('dashboard.viewPipeline')} <ArrowRight size={12} />
                         </button>
                     </div>
                     <div className="overflow-x-auto custom-scrollbar">
                         <table className="w-full text-left border-collapse">
                             <thead className="text-secondary-400 text-[9px] uppercase tracking-[0.3em] font-black border-b border-secondary-100">
                                 <tr>
-                                    <th className="pb-3 pr-6">Name</th>
-                                    <th className="pb-3 pr-6">Title</th>
-                                    <th className="pb-3 pr-6">Company</th>
-                                    <th className="pb-3 pr-6">Status</th>
-                                    <th className="pb-3 text-right">Added</th>
+                                    <th className="pb-3 pr-6">{t('common.name')}</th>
+                                    <th className="pb-3 pr-6">{t('common.title')}</th>
+                                    <th className="pb-3 pr-6">{t('common.company')}</th>
+                                    <th className="pb-3 pr-6">{t('common.status')}</th>
+                                    <th className="pb-3 text-right">{t('dashboard.added')}</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-secondary-100/50">
@@ -234,7 +237,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                                                     {(lead.full_name ?? lead.first_name ?? '?').charAt(0)}
                                                 </div>
                                                 <span className="font-bold text-slate-900 text-sm group-hover:text-primary-700 transition-colors">
-                                                    {lead.full_name ?? (`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || 'Unknown')}
+                                                    {lead.full_name ?? (`${lead.first_name ?? ''} ${lead.last_name ?? ''}`.trim() || t('common.unknown'))}
                                                 </span>
                                             </div>
                                         </td>
@@ -249,7 +252,7 @@ export default function DashboardClient({ leadStats, recentLeads, totalLeads, em
                                         </td>
                                         <td className="py-4 text-right">
                                             <span className="text-[10px] font-black text-secondary-400 uppercase tracking-widest">
-                                                {formatRelativeTime(lead.created_at)}
+                                                {formatRelativeTime(lead.created_at, t)}
                                             </span>
                                         </td>
                                     </tr>
@@ -345,7 +348,7 @@ function StageBadge({ stage }: { stage: string }) {
     );
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string, t: (key: TranslationKey, params?: Record<string, string | number>) => string): string {
     const date = new Date(dateStr);
     const now = new Date();
     const diffMs = now.getTime() - date.getTime();
@@ -353,9 +356,9 @@ function formatRelativeTime(dateStr: string): string {
     const diffHours = Math.floor(diffMins / 60);
     const diffDays = Math.floor(diffHours / 24);
 
-    if (diffMins < 1) return 'Just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 30) return `${diffDays}d ago`;
+    if (diffMins < 1) return t('time.justNow');
+    if (diffMins < 60) return t('time.mAgo', { n: diffMins });
+    if (diffHours < 24) return t('time.hAgo', { n: diffHours });
+    if (diffDays < 30) return t('time.dAgo', { n: diffDays });
     return date.toLocaleDateString();
 }

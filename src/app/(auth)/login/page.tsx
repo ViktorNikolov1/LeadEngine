@@ -4,10 +4,12 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Loader2 } from 'lucide-react';
+import { useLanguage } from '@/components/LanguageProvider';
 import DotGrid from '@/components/ui/DotGrid';
 
 export default function LoginPage() {
     const router = useRouter();
+    const { t } = useLanguage();
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
@@ -53,8 +55,8 @@ export default function LoginPage() {
                     <div className="w-14 h-14 bg-gradient-to-br from-primary-500 to-primary-700 rounded-[14px] flex items-center justify-center text-white font-black text-2xl shadow-lg shadow-primary-600/30 mx-auto mb-4">
                         L
                     </div>
-                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">Welcome Back</h1>
-                    <p className="text-secondary-500 text-sm mt-1">Sign in to your LeadEngine account</p>
+                    <h1 className="text-2xl font-black text-slate-900 tracking-tight">{t('auth.welcomeBack')}</h1>
+                    <p className="text-secondary-500 text-sm mt-1">{t('auth.signInSubtitle')}</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -64,7 +66,7 @@ export default function LoginPage() {
                         </div>
                     )}
                     <div>
-                        <label className="text-sm font-medium text-slate-700 mb-2 block">Email</label>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">{t('common.email')}</label>
                         <input
                             type="email"
                             placeholder="you@company.com"
@@ -75,7 +77,7 @@ export default function LoginPage() {
                         />
                     </div>
                     <div>
-                        <label className="text-sm font-medium text-slate-700 mb-2 block">Password</label>
+                        <label className="text-sm font-medium text-slate-700 mb-2 block">{t('common.password')}</label>
                         <input
                             type="password"
                             placeholder="••••••••"
@@ -86,12 +88,12 @@ export default function LoginPage() {
                         />
                     </div>
                     <button type="submit" disabled={loading} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
-                        {loading ? <Loader2 className="animate-spin" size={18} /> : 'Sign In'}
+                        {loading ? <Loader2 className="animate-spin" size={18} /> : t('auth.signIn')}
                     </button>
                 </form>
 
                 <p className="text-center text-sm text-secondary-400">
-                    Access is restricted to authorized users only.
+                    {t('auth.accessRestricted')}
                 </p>
             </div>
         </div>
